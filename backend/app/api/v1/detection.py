@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import math
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Tuple
 
@@ -17,6 +19,11 @@ from ...pipeline.lsh.candidate_finder import (
 )
 from ...pipeline.gst.greedy_string_tiling import GreedyStringTiler
 from ...pipeline.merging.passage_merger import PassageMatch, merge_overlapping_passages
+from ...pipeline.pos_analysis.pos_tagger import POSTagger
+from ...pipeline.pos_analysis.pos_similarity import POSSimilarity
+from ...pipeline.similarity.edit_distance import EditDistance
+from ...pipeline.stylometry.style_analyzer import StylometryAnalyzer
+from ...utils.disjoint_set import DisjointSet
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +69,11 @@ class PlagiarismDetector:
             min_match_length=self.config.gst_min_match_length
         )
 
+        self.pos_tagger = POSTagger()
+        self.pos_similarity = POSSimilarity(self.pos_tagger)
+        self.edit_distance = EditDistance()
+        self.stylometry = StylometryAnalyzer()
+
     def _preprocess_document(self, doc: Document) -> Tuple[str, List[str]]:
         """Normalize and tokenize the document content."""
         if not isinstance(doc, Document):
@@ -84,11 +96,11 @@ class PlagiarismDetector:
                 result[doc.id] = shingles
         return result
 
-    def detect(self, documents: Iterable[Document]) -> Dict[str, Dict]:
+    def detect(self, documents: Iterable[Document]) -> Dict[str, List]:
         """
         Run the full plagiarism detection pipeline.
 
-        Returns mapping of document_id -> report.
+        Returns mapping of document_id -> [doc_id, doc_group, plagiarism_score].
         """
         docs_list = list(documents)
         if len(docs_list) < 2:
@@ -96,11 +108,16 @@ class PlagiarismDetector:
 
         doc_map: Dict[str, Document] = {d.id: d for d in docs_list}
 
+        stylometry_map: Dict[str, Dict[str, float]] = {
+            doc_id: self.stylometry.analyze(doc.content)
+            for doc_id, doc in doc_map.items()
+        }
+
         shingles_by_doc = self._build_shingles(docs_list)
         candidates = self.candidate_finder.find_candidates(shingles_by_doc)
 
         if not candidates:
-            return {doc.id: self._empty_report(doc.id) for doc in docs_list}
+            return {doc.id: [doc.id, {}, 0.0] for doc in docs_list}
 
         preprocessed: Dict[str, Tuple[str, List[str]]] = {}
         for doc_id, doc in doc_map.items():
@@ -119,21 +136,21 @@ class PlagiarismDetector:
 
             tiles = self.gst.find_tiles(tokens_a, tokens_b)
             for tile in tiles:
-                start_char = self._approx_char_offset(tokens_a, tile.src_start)
-                end_char = self._approx_char_offset(tokens_a, tile.src_end)
+                source_start = self._approx_char_offset(tokens_a, tile.src_start)
+                source_end = self._approx_char_offset(tokens_a, tile.src_end)
 
-                seg_a = norm_a[start_char:end_char]
-                seg_b = norm_b[
-                    self._approx_char_offset(tokens_b, tile.dst_start) : self._approx_char_offset(
-                        tokens_b, tile.dst_end
-                    )
-                ]
-                raw_sim = self._raw_text_similarity(seg_a, seg_b)
+                target_start = self._approx_char_offset(tokens_b, tile.dst_start)
+                target_end = self._approx_char_offset(tokens_b, tile.dst_end)
+                
+                seg_a = norm_a[source_start:source_end]
+                seg_b = norm_b[target_start : target_end]
+                
+                raw_sim = self.edit_distance.raw_text_similarity(seg_a, seg_b)
                 if raw_sim < self.config.raw_similarity_threshold:
                     continue
 
                 # Placeholder POS/stylometry checks; assume structural similarity for now.
-                pos_sim = 1.0
+                pos_sim = self.pos_similarity.similarity(seg_a, seg_b)
                 if pos_sim < self.config.pos_similarity_threshold:
                     continue
 
@@ -141,14 +158,17 @@ class PlagiarismDetector:
                     PassageMatch(
                         source_doc_id=doc_a,
                         target_doc_id=doc_b,
-                        start_pos=start_char,
-                        end_pos=end_char,
+                        source_start=source_start,
+                        source_end=source_end,
+                        target_start=target_start,
+                        target_end=target_end,
                         similarity=float(raw_sim),
+                        pos_similarity=float(pos_sim),
                     )
                 )
 
         merged = merge_overlapping_passages(all_passages, max_gap=5)
-        return self._build_reports(doc_map, merged)
+        return self._build_reports(doc_map, merged, stylometry_map)
 
     @staticmethod
     def _approx_char_offset(tokens: List[str], token_index: int) -> int:
@@ -159,35 +179,53 @@ class PlagiarismDetector:
             token_index = len(tokens)
         return sum(len(t) + 1 for t in tokens[:token_index])
 
-    @staticmethod
-    def _levenshtein_distance(a: str, b: str) -> int:
-        if a == b:
-            return 0
-        if not a:
-            return len(b)
-        if not b:
-            return len(a)
-        if len(a) < len(b):
-            a, b = b, a
+    def _stylometry_similarity(
+        self,
+        s1: Dict[str, float],
+        s2: Dict[str, float]
+    ) -> float:
+        """Compute stylometry similarity using Euclidean distance."""
+        features = [
+            "avg_sentence_length",
+            "std_sentence_length",
+            "type_token_ratio",
+            "function_word_ratio",
+            "punctuation_ratio"
+        ]
+        dist = 0.0
+        for f in features:
+            dist += (s1.get(f, 0.0) - s2.get(f, 0.0)) ** 2
+        dist = math.sqrt(dist)
+        max_possible = math.sqrt(len(features))  # assuming values in [0,1]
+        similarity = 1.0 - (dist / max_possible)
+        return max(0.0, min(1.0, similarity))
 
-        previous = list(range(len(b) + 1))
-        for i, ca in enumerate(a, start=1):
-            current = [i]
-            for j, cb in enumerate(b, start=1):
-                ins = previous[j] + 1
-                dele = current[j - 1] + 1
-                sub = previous[j - 1] + (ca != cb)
-                current.append(min(ins, dele, sub))
-            previous = current
-        return previous[-1]
+    def _compute_doc_similarity(
+        self,
+        passages: List[Dict],
+        doc_length: int,
+        stylometry_sim: float,
+    ) -> float:
+        """Compute document-level similarity score."""
+        alpha = 0.5
+        beta = 0.3
+        gamma = 0.2
 
-    def _raw_text_similarity(self, a: str, b: str) -> float:
-        if not a and not b:
-            return 0.0
-        dist = self._levenshtein_distance(a, b)
-        max_len = max(len(a), len(b))
-        return 1.0 - (dist / max_len)
+        doc_length = max(doc_length, 1)  # ✅ safety
 
+        score = 0.0
+        for p in passages:
+            # ✅ use correct field
+            k = p["source_end"] - p["source_start"]
+
+            raw_sim = p["similarity"]
+            pos_sim = p["pos_similarity"]
+
+            score += (k / doc_length) * (alpha * raw_sim + beta * pos_sim)
+
+        final_score = score + gamma * stylometry_sim
+        return max(0.0, min(1.0, final_score))
+    
     @staticmethod
     def _empty_report(doc_id: str) -> Dict:
         return {"document_id": doc_id, "plagiarism_score": 0.0, "matched_passages": []}
@@ -196,34 +234,140 @@ class PlagiarismDetector:
         self,
         docs: Dict[str, Document],
         passages: Iterable[PassageMatch],
-    ) -> Dict[str, Dict]:
-        """Aggregate passages into per-document reports."""
-        reports: Dict[str, Dict] = {
-            doc_id: self._empty_report(doc_id) for doc_id in docs.keys()
-        }
+        stylometry_map: Dict[str, Dict[str, float]],
+    ) -> Dict[str, List]:
+        """Aggregate passages into per-document reports with grouped matches (bidirectional)."""
+
+        # 🔥 STEP 1: Build bidirectional grouping
+        grouped: Dict[str, Dict[str, List[PassageMatch]]] = {}
 
         for p in passages:
-            src_report = reports[p.source_doc_id]
-            src_report.setdefault("matched_passages", []).append(
-                {
-                    "source_doc": p.target_doc_id,
-                    "start_pos": p.start_pos,
-                    "end_pos": p.end_pos,
-                    "similarity": p.similarity,
-                }
+            # Source → Target
+            grouped.setdefault(p.source_doc_id, {}).setdefault(p.target_doc_id, []).append(p)
+
+            # Target → Source (swap positions correctly)
+            grouped.setdefault(p.target_doc_id, {}).setdefault(p.source_doc_id, []).append(
+                PassageMatch(
+                    source_doc_id=p.target_doc_id,
+                    target_doc_id=p.source_doc_id,
+                    source_start=p.target_start,
+                    source_end=p.target_end,
+                    target_start=p.source_start,
+                    target_end=p.source_end,
+                    similarity=p.similarity,
+                    pos_similarity=p.pos_similarity,
+                )
             )
 
-        for doc_id, report in reports.items():
-            doc = docs[doc_id]
-            total_len = max(len(doc.content), 1)
-            plag_chars = 0
-            for mp in report.get("matched_passages", []):
-                plag_chars += max(0, mp["end_pos"] - mp["start_pos"])
-            score = (plag_chars / total_len) * 100.0
-            report["plagiarism_score"] = round(score, 2)
+        # 🔥 STEP 2: Build reports
+        reports: Dict[str, List] = {}
+
+        for doc_id in docs.keys():
+            doc_group: Dict[str, List] = {}
+
+            # Safe doc length
+            doc_length = max(len(docs[doc_id].content), 1)
+
+            if doc_id in grouped:
+                for target_doc_id, passage_list in grouped[doc_id].items():
+
+                    # 🔥 Build passage list with full info
+                    passages_list = [
+                        {
+                            "source_start": p.source_start,
+                            "source_end": p.source_end,
+                            "target_start": p.target_start,
+                            "target_end": p.target_end,
+                            "similarity": p.similarity,
+                            "pos_similarity": p.pos_similarity,
+                        }
+                        for p in passage_list
+                    ]
+
+                    # 🔥 Stylometry similarity (doc ↔ target_doc)
+                    stylometry_sim = self._stylometry_similarity(
+                        stylometry_map.get(doc_id, {}),
+                        stylometry_map.get(target_doc_id, {}),
+                    )
+
+                    # 🔥 Compute similarity score
+                    similarity_score = self._compute_doc_similarity(
+                        passages_list,
+                        doc_length,
+                        stylometry_sim,
+                    )
+
+                    doc_group[target_doc_id] = [
+                        passages_list,
+                        similarity_score,
+                    ]
+
+            # 🔥 STEP 3: Overall plagiarism score based on merged passages
+            all_passages_flat = []
+            for target_doc_id, (passages_list, _) in doc_group.items():
+                all_passages_flat.extend(passages_list)
+
+            # Convert to PassageMatch for merging
+            passages_for_merge = [
+                PassageMatch(
+                    source_doc_id=doc_id,
+                    target_doc_id="dummy",  # dummy target for merging
+                    source_start=p["source_start"],
+                    source_end=p["source_end"],
+                    target_start=0,  # not used
+                    target_end=0,   # not used
+                    similarity=p["similarity"],
+                    pos_similarity=p["pos_similarity"],
+                )
+                for p in all_passages_flat
+            ]
+
+            # Merge overlapping passages
+            merged_passages = merge_overlapping_passages(passages_for_merge, max_gap=0)
+
+            # Compute score from merged passages
+            y = 0.6  # edit similarity weight
+            z = 0.4  # pos similarity weight
+            score = 0.0
+            for mp in merged_passages:
+                k = mp.source_end - mp.source_start
+                edit_sim = mp.similarity
+                pos_sim = mp.pos_similarity
+                score += (k / doc_length) * (y * edit_sim + z * pos_sim)
+
+            overall_plagiarism_score = score * 100.0
+            overall_plagiarism_score = min(100.0, max(0.0, overall_plagiarism_score))
+
+            reports[doc_id] = [
+                doc_id,
+                doc_group,
+                round(overall_plagiarism_score, 2),
+            ]
 
         return reports
 
+    def find_similar_document_clusters(
+        self,
+        reports: Dict[str, List],
+        threshold: float
+    ) -> List[List[str]]:
+        """Find clusters of documents with similarity >= threshold using DSU."""
+        dsu = DisjointSet(reports.keys())
+
+        for doc_id, (_, doc_group, _) in reports.items():
+            for target_doc_id, (_, similarity_score) in doc_group.items():
+                if similarity_score >= threshold:
+                    if doc_id < target_doc_id and similarity_score >= threshold:
+                        dsu.union(doc_id, target_doc_id)
+
+        from collections import defaultdict
+        clusters_map = defaultdict(list)
+        for doc_id in reports.keys():
+            root = dsu.find(doc_id)
+            clusters_map[root].append(doc_id)
+
+        clusters = [sorted(cluster) for cluster in clusters_map.values() if len(cluster) >= 2]
+        return clusters
+
 
 __all__ = ["PlagiarismConfig", "PlagiarismDetector"]
-

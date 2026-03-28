@@ -8,9 +8,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    app_name: str 
-    mongodb_uri: str 
-    mongodb_db_name: str 
+    app_name: str
+    mongodb_uri: str
+    mongodb_db_name: str
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -1,15 +1,10 @@
 import { LoginCredentials, LoginResponse, RegisterCredentials } from "@/types/auth";
 
-/**
- * Mock login API — simulates a 1.2s network request.
- * Returns a fake user on success, throws on invalid credentials.
- */
 export async function loginApi(
   credentials: LoginCredentials
 ): Promise<LoginResponse> {
   return new Promise((resolve, reject) => {
     setTimeout(() => {
-      // Mock validation
       if (
         credentials.email === "admin@labguard.com" &&
         credentials.password === "password123"
@@ -40,11 +35,6 @@ export async function loginApi(
     }, 1200);
   });
 }
-
-/**
- * Mock register API — simulates a 1.2s network request.
- * Returns a fake user on success.
- */
 export async function registerApi(
   credentials: RegisterCredentials
 ): Promise<LoginResponse> {

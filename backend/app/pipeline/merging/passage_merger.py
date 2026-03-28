@@ -10,9 +10,18 @@ class PassageMatch:
 
     source_doc_id: str
     target_doc_id: str
+<<<<<<< HEAD
     start_pos: int
     end_pos: int
     similarity: float
+=======
+    source_start: int
+    source_end: int
+    target_start: int
+    target_end: int
+    similarity: float
+    pos_similarity: float
+>>>>>>> origin/main
 
 
 def merge_overlapping_passages(
@@ -31,16 +40,25 @@ def merge_overlapping_passages(
         return []
 
     passages_list.sort(
+<<<<<<< HEAD
         key=lambda p: (p.source_doc_id, p.target_doc_id, p.start_pos, p.end_pos)
     )
 
     merged: List[PassageMatch] = []
     current = passages_list[0]
+=======
+        key=lambda p: (p.source_doc_id, p.target_doc_id, p.source_start, p.source_end)
+    )
+
+    merged: List[PassageMatch] = []
+    current = PassageMatch(**vars(passages_list[0]))
+>>>>>>> origin/main
 
     for p in passages_list[1:]:
         if (
             p.source_doc_id == current.source_doc_id
             and p.target_doc_id == current.target_doc_id
+<<<<<<< HEAD
             and p.start_pos <= current.end_pos + max_gap
         ):
             current.end_pos = max(current.end_pos, p.end_pos)
@@ -48,6 +66,17 @@ def merge_overlapping_passages(
         else:
             merged.append(current)
             current = p
+=======
+            and p.source_start <= current.source_end + max_gap
+        ):
+            current.source_end = max(current.source_end, p.source_end)
+            current.target_end = max(current.target_end, p.target_end)
+            current.similarity = max(current.similarity, p.similarity)
+            current.pos_similarity = max(current.pos_similarity, p.pos_similarity)
+        else:
+            merged.append(current)
+            current = PassageMatch(**vars(p))
+>>>>>>> origin/main
 
     merged.append(current)
     return merged

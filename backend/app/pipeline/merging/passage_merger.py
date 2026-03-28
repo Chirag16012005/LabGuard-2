@@ -59,4 +59,3 @@ def merge_overlapping_passages(
 
 
 __all__ = ["PassageMatch", "merge_overlapping_passages"]
-

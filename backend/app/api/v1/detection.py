@@ -1,11 +1,8 @@
 from __future__ import annotations
 
 import logging
-<<<<<<< HEAD
-=======
 import math
 from collections import defaultdict
->>>>>>> origin/main
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Tuple
 
@@ -22,14 +19,11 @@ from ...pipeline.lsh.candidate_finder import (
 )
 from ...pipeline.gst.greedy_string_tiling import GreedyStringTiler
 from ...pipeline.merging.passage_merger import PassageMatch, merge_overlapping_passages
-<<<<<<< HEAD
-=======
 from ...pipeline.pos_analysis.pos_tagger import POSTagger
 from ...pipeline.pos_analysis.pos_similarity import POSSimilarity
 from ...pipeline.similarity.edit_distance import EditDistance
 from ...pipeline.stylometry.style_analyzer import StylometryAnalyzer
 from ...utils.disjoint_set import DisjointSet
->>>>>>> origin/main
 
 logger = logging.getLogger(__name__)
 
@@ -75,14 +69,11 @@ class PlagiarismDetector:
             min_match_length=self.config.gst_min_match_length
         )
 
-<<<<<<< HEAD
-=======
         self.pos_tagger = POSTagger()
         self.pos_similarity = POSSimilarity(self.pos_tagger)
         self.edit_distance = EditDistance()
         self.stylometry = StylometryAnalyzer()
 
->>>>>>> origin/main
     def _preprocess_document(self, doc: Document) -> Tuple[str, List[str]]:
         """Normalize and tokenize the document content."""
         if not isinstance(doc, Document):
@@ -105,19 +96,11 @@ class PlagiarismDetector:
                 result[doc.id] = shingles
         return result
 
-<<<<<<< HEAD
-    def detect(self, documents: Iterable[Document]) -> Dict[str, Dict]:
-        """
-        Run the full plagiarism detection pipeline.
-
-        Returns mapping of document_id -> report.
-=======
     def detect(self, documents: Iterable[Document]) -> Dict[str, List]:
         """
         Run the full plagiarism detection pipeline.
 
         Returns mapping of document_id -> [doc_id, doc_group, plagiarism_score].
->>>>>>> origin/main
         """
         docs_list = list(documents)
         if len(docs_list) < 2:
@@ -125,23 +108,16 @@ class PlagiarismDetector:
 
         doc_map: Dict[str, Document] = {d.id: d for d in docs_list}
 
-<<<<<<< HEAD
-=======
         stylometry_map: Dict[str, Dict[str, float]] = {
             doc_id: self.stylometry.analyze(doc.content)
             for doc_id, doc in doc_map.items()
         }
 
->>>>>>> origin/main
         shingles_by_doc = self._build_shingles(docs_list)
         candidates = self.candidate_finder.find_candidates(shingles_by_doc)
 
         if not candidates:
-<<<<<<< HEAD
-            return {doc.id: self._empty_report(doc.id) for doc in docs_list}
-=======
             return {doc.id: [doc.id, {}, 0.0] for doc in docs_list}
->>>>>>> origin/main
 
         preprocessed: Dict[str, Tuple[str, List[str]]] = {}
         for doc_id, doc in doc_map.items():
@@ -160,18 +136,6 @@ class PlagiarismDetector:
 
             tiles = self.gst.find_tiles(tokens_a, tokens_b)
             for tile in tiles:
-<<<<<<< HEAD
-                start_char = self._approx_char_offset(tokens_a, tile.src_start)
-                end_char = self._approx_char_offset(tokens_a, tile.src_end)
-
-                seg_a = norm_a[start_char:end_char]
-                seg_b = norm_b[
-                    self._approx_char_offset(tokens_b, tile.dst_start) : self._approx_char_offset(
-                        tokens_b, tile.dst_end
-                    )
-                ]
-                raw_sim = self._raw_text_similarity(seg_a, seg_b)
-=======
                 source_start = self._approx_char_offset(tokens_a, tile.src_start)
                 source_end = self._approx_char_offset(tokens_a, tile.src_end)
 
@@ -182,16 +146,11 @@ class PlagiarismDetector:
                 seg_b = norm_b[target_start : target_end]
                 
                 raw_sim = self.edit_distance.raw_text_similarity(seg_a, seg_b)
->>>>>>> origin/main
                 if raw_sim < self.config.raw_similarity_threshold:
                     continue
 
                 # Placeholder POS/stylometry checks; assume structural similarity for now.
-<<<<<<< HEAD
-                pos_sim = 1.0
-=======
                 pos_sim = self.pos_similarity.similarity(seg_a, seg_b)
->>>>>>> origin/main
                 if pos_sim < self.config.pos_similarity_threshold:
                     continue
 
@@ -199,27 +158,17 @@ class PlagiarismDetector:
                     PassageMatch(
                         source_doc_id=doc_a,
                         target_doc_id=doc_b,
-<<<<<<< HEAD
-                        start_pos=start_char,
-                        end_pos=end_char,
-                        similarity=float(raw_sim),
-=======
                         source_start=source_start,
                         source_end=source_end,
                         target_start=target_start,
                         target_end=target_end,
                         similarity=float(raw_sim),
                         pos_similarity=float(pos_sim),
->>>>>>> origin/main
                     )
                 )
 
         merged = merge_overlapping_passages(all_passages, max_gap=5)
-<<<<<<< HEAD
-        return self._build_reports(doc_map, merged)
-=======
         return self._build_reports(doc_map, merged, stylometry_map)
->>>>>>> origin/main
 
     @staticmethod
     def _approx_char_offset(tokens: List[str], token_index: int) -> int:
@@ -230,37 +179,6 @@ class PlagiarismDetector:
             token_index = len(tokens)
         return sum(len(t) + 1 for t in tokens[:token_index])
 
-<<<<<<< HEAD
-    @staticmethod
-    def _levenshtein_distance(a: str, b: str) -> int:
-        if a == b:
-            return 0
-        if not a:
-            return len(b)
-        if not b:
-            return len(a)
-        if len(a) < len(b):
-            a, b = b, a
-
-        previous = list(range(len(b) + 1))
-        for i, ca in enumerate(a, start=1):
-            current = [i]
-            for j, cb in enumerate(b, start=1):
-                ins = previous[j] + 1
-                dele = current[j - 1] + 1
-                sub = previous[j - 1] + (ca != cb)
-                current.append(min(ins, dele, sub))
-            previous = current
-        return previous[-1]
-
-    def _raw_text_similarity(self, a: str, b: str) -> float:
-        if not a and not b:
-            return 0.0
-        dist = self._levenshtein_distance(a, b)
-        max_len = max(len(a), len(b))
-        return 1.0 - (dist / max_len)
-
-=======
     def _stylometry_similarity(
         self,
         s1: Dict[str, float],
@@ -308,7 +226,6 @@ class PlagiarismDetector:
         final_score = score + gamma * stylometry_sim
         return max(0.0, min(1.0, final_score))
     
->>>>>>> origin/main
     @staticmethod
     def _empty_report(doc_id: str) -> Dict:
         return {"document_id": doc_id, "plagiarism_score": 0.0, "matched_passages": []}
@@ -317,39 +234,6 @@ class PlagiarismDetector:
         self,
         docs: Dict[str, Document],
         passages: Iterable[PassageMatch],
-<<<<<<< HEAD
-    ) -> Dict[str, Dict]:
-        """Aggregate passages into per-document reports."""
-        reports: Dict[str, Dict] = {
-            doc_id: self._empty_report(doc_id) for doc_id in docs.keys()
-        }
-
-        for p in passages:
-            src_report = reports[p.source_doc_id]
-            src_report.setdefault("matched_passages", []).append(
-                {
-                    "source_doc": p.target_doc_id,
-                    "start_pos": p.start_pos,
-                    "end_pos": p.end_pos,
-                    "similarity": p.similarity,
-                }
-            )
-
-        for doc_id, report in reports.items():
-            doc = docs[doc_id]
-            total_len = max(len(doc.content), 1)
-            plag_chars = 0
-            for mp in report.get("matched_passages", []):
-                plag_chars += max(0, mp["end_pos"] - mp["start_pos"])
-            score = (plag_chars / total_len) * 100.0
-            report["plagiarism_score"] = round(score, 2)
-
-        return reports
-
-
-__all__ = ["PlagiarismConfig", "PlagiarismDetector"]
-
-=======
         stylometry_map: Dict[str, Dict[str, float]],
     ) -> Dict[str, List]:
         """Aggregate passages into per-document reports with grouped matches (bidirectional)."""
@@ -487,4 +371,3 @@ __all__ = ["PlagiarismConfig", "PlagiarismDetector"]
 
 
 __all__ = ["PlagiarismConfig", "PlagiarismDetector"]
->>>>>>> origin/main

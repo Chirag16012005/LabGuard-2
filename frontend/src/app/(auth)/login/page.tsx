@@ -5,7 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { loginApi } from "@/lib/api-client";
-import { useAuthStore } from "@/store/use-auth-store";
+import { useAuthStore } from "@/store/authStore";
 import { LoginCredentials } from "@/types/auth";
 import { Mail, Lock, ArrowRight, Loader2, ShieldCheck } from "lucide-react";
 
@@ -20,7 +20,7 @@ export default function LoginPage() {
   const loginMutation = useMutation({
     mutationFn: (credentials: LoginCredentials) => loginApi(credentials),
     onSuccess: (data) => {
-      setUser(data.user, data.token);
+      setUser(data.user, data.token); // Assume teacher or student comes from backend payload
       router.push("/dashboard");
     },
   });
@@ -29,7 +29,6 @@ export default function LoginPage() {
     e.preventDefault();
     setValidationError("");
 
-    // Basic validation
     if (!email.trim()) {
       setValidationError("Email is required.");
       return;
@@ -57,13 +56,13 @@ export default function LoginPage() {
     validationError || (loginMutation.isError ? loginMutation.error.message : "");
 
   return (
-    <div className="w-full max-w-md">
+    <div className="w-full max-w-md font-sans">
       {/* Brand header */}
       <div className="mb-8 text-center">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200 bg-white">
-          <ShieldCheck className="h-7 w-7 text-slate-700" strokeWidth={1.5} />
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-100 bg-white shadow-sm">
+          <ShieldCheck className="h-7 w-7 text-blue-600" strokeWidth={1.5} />
         </div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-800">
           Welcome back
         </h1>
         <p className="mt-1.5 text-sm text-slate-500">
@@ -72,7 +71,7 @@ export default function LoginPage() {
       </div>
 
       {/* Card */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
+      <div className="rounded-2xl border border-blue-50 bg-white p-6 sm:p-8 shadow-sm">
         {/* Error message */}
         {errorMessage && (
           <div
@@ -117,7 +116,7 @@ export default function LoginPage() {
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 transition-all duration-200 focus:border-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-200"
+                className="w-full rounded-xl border border-slate-200 bg-[#F0F7FF] py-2.5 pl-10 pr-4 text-sm text-slate-800 placeholder:text-slate-400 transition-all duration-200 focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
               />
             </div>
           </div>
@@ -133,7 +132,7 @@ export default function LoginPage() {
               </label>
               <button
                 type="button"
-                className="text-xs font-medium text-slate-500 transition-colors duration-200 hover:text-slate-800"
+                className="text-xs font-medium text-blue-600 transition-colors duration-200 hover:text-blue-700"
               >
                 Forgot password?
               </button>
@@ -151,7 +150,7 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 transition-all duration-200 focus:border-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-200"
+                className="w-full rounded-xl border border-slate-200 bg-[#F0F7FF] py-2.5 pl-10 pr-4 text-sm text-slate-800 placeholder:text-slate-400 transition-all duration-200 focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
               />
             </div>
           </div>
@@ -161,7 +160,7 @@ export default function LoginPage() {
             id="login-submit"
             type="submit"
             disabled={loginMutation.isPending}
-            className="group mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:translate-y-[-2px] hover:bg-slate-800 disabled:pointer-events-none disabled:opacity-60"
+            className="group mt-2 flex w-full items-center justify-center gap-2 rounded-xl border-none bg-blue-500 px-4 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:translate-y-[-1px] hover:bg-blue-600 hover:shadow-sm disabled:pointer-events-none disabled:opacity-60"
           >
             {loginMutation.isPending ? (
               <>
@@ -179,15 +178,15 @@ export default function LoginPage() {
 
         {/* Divider */}
         <div className="my-6 flex items-center gap-3">
-          <div className="h-px flex-1 bg-slate-200" />
+          <div className="h-px flex-1 bg-slate-100" />
           <span className="text-xs text-slate-400">or</span>
-          <div className="h-px flex-1 bg-slate-200" />
+          <div className="h-px flex-1 bg-slate-100" />
         </div>
 
         {/* Social login placeholder */}
         <button
           type="button"
-          className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-all duration-200 hover:translate-y-[-2px] hover:bg-slate-50"
+          className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-all duration-200 hover:translate-y-[-1px] hover:bg-[#F0F7FF] hover:border-blue-100"
         >
           <svg className="h-4 w-4" viewBox="0 0 24 24">
             <path
@@ -216,7 +215,7 @@ export default function LoginPage() {
         Don&apos;t have an account?{" "}
         <Link
           href="/register"
-          className="font-medium text-slate-700 transition-colors duration-200 hover:text-slate-900"
+          className="font-medium text-blue-600 transition-colors duration-200 hover:text-blue-700"
         >
           Create account
         </Link>

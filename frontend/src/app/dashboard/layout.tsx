@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuthStore } from "@/store/use-auth-store";
+import { useAuthStore } from "@/store/authStore";
 import { LogOut, LayoutDashboard, FileText, Activity } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
@@ -40,22 +40,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   ];
 
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-900">
+    <div className="flex min-h-screen bg-slate-50 text-slate-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100">
       {/* Mobile sidebar toggle overlay */}
       {sidebarOpen && (
         <div 
-          className="fixed inset-0 z-20 bg-slate-900/50 sm:hidden" 
+          className="fixed inset-0 z-20 bg-slate-900/50 sm:hidden dark:bg-slate-950/80" 
           onClick={() => setSidebarOpen(false)} 
         />
       )}
 
       {/* Sidebar */}
       <aside className={cn(
-        "fixed inset-y-0 left-0 z-30 w-64 transform border-r border-slate-200 bg-white transition-transform sm:translate-x-0 sm:static",
+        "fixed inset-y-0 left-0 z-30 w-64 transform border-r border-slate-200 bg-white transition-transform duration-300 dark:border-slate-800 dark:bg-slate-900 sm:translate-x-0 sm:static",
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-        <div className="flex h-16 items-center px-6 border-b border-slate-200">
-          <span className="text-lg font-semibold tracking-tight text-slate-900">LabGuard</span>
+        <div className="flex h-16 items-center px-6 border-b border-slate-200 dark:border-slate-800">
+          <span className="text-lg font-semibold tracking-tight text-slate-800 dark:text-slate-100">LabGuard</span>
         </div>
         
         <div className="flex flex-col justify-between h-[calc(100vh-4rem)] p-4">
@@ -69,13 +69,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   href={item.href} 
                   onClick={() => setSidebarOpen(false)}
                   className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:translate-y-[-2px]",
+                    "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:translate-y-[-1px]",
                     isActive 
-                      ? "bg-slate-100 text-slate-900" 
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                      ? "bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400" 
+                      : "text-slate-600 hover:bg-slate-50 hover:text-sky-600 dark:text-slate-400 dark:hover:bg-slate-800/80 dark:hover:text-sky-400"
                   )}
                 >
-                  <Icon className={cn("h-4 w-4", isActive ? "text-slate-700" : "text-slate-400")} strokeWidth={1.5} />
+                  <Icon className={cn("h-4 w-4 transition-colors", isActive ? "text-sky-600 dark:text-sky-400" : "text-slate-400 group-hover:text-sky-500")} strokeWidth={1.5} />
                   {item.name}
                 </Link>
               );
@@ -83,13 +83,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </nav>
 
           <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1 rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <span className="text-sm font-bold text-slate-900">{user.name}</span>
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{user.role}</span>
+            <div className="flex flex-col gap-1 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
+              <span className="text-sm font-bold text-slate-800 dark:text-slate-200">{user.name}</span>
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider dark:text-slate-400">{user.role}</span>
             </div>
             <button
               onClick={handleLogout}
-              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-red-600 transition-all hover:translate-y-[-2px] hover:bg-red-50 hover:text-red-700"
+              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-all hover:translate-y-[-1px] hover:bg-slate-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-red-400"
             >
               <LogOut className="h-4 w-4" strokeWidth={1.5} />
               Logout
@@ -100,15 +100,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0">
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-8">
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 shrink-0 transition-colors duration-300 dark:bg-slate-900 dark:border-slate-800 sm:px-8">
           <div className="flex items-center gap-4">
             <button 
-              className="sm:hidden p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+              className="sm:hidden p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-lg dark:text-slate-400 dark:hover:bg-slate-800"
               onClick={() => setSidebarOpen(true)}
             >
               <LayoutDashboard className="h-5 w-5" />
             </button>
-            <h1 className="text-xl font-semibold tracking-tight text-slate-900 capitalize">
+            <h1 className="text-xl font-semibold tracking-tight text-slate-800 capitalize dark:text-slate-100">
               {pathname.split('/').pop() === 'dashboard' ? 'Dashboard' : pathname.split('/').pop()?.replace('-', ' ')}
             </h1>
           </div>

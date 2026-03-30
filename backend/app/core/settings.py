@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     app_name: str
     mongodb_uri: str
     mongodb_db_name: str
+    jwt_secret: str = "your-secret-key-change-in-production"
+    jwt_algorithm: str = "HS256"
+    jwt_expiration_hours: int = 24
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -9,6 +9,14 @@ async def ensure_indexes() -> None:
     """Create indexes required by core collections."""
     db = get_database()
 
+    await db["users"].create_index(
+        [("email", ASCENDING)], unique=True, name="users_email_unique"
+    )
+
+    await db["classes"].create_index(
+        [("class_code", ASCENDING)], unique=True, name="classes_class_code_unique"
+    )
+
     await db["documents"].create_index(
         [("id", ASCENDING)], unique=True, name="documents_id_unique"
     )

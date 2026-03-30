@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 
-from pydantic import EmailStr, Field, SecretStr
+import re
+
+from pydantic import EmailStr, Field, SecretStr, field_validator
 
 from .base_schema import APIModel
 
@@ -19,6 +21,20 @@ class RegisterRequest(APIModel):
     email: EmailStr
     password: SecretStr = Field(min_length=8, max_length=128)
     role: UserRole = UserRole.student
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_strength(cls, value: SecretStr) -> SecretStr:
+        raw_password = value.get_secret_value()
+        if len(raw_password) < 8:
+            raise ValueError("Password must be at least 8 characters long")
+        if not re.search(r"[A-Za-z]", raw_password):
+            raise ValueError("Password must include at least one letter")
+        if not re.search(r"\d", raw_password):
+            raise ValueError("Password must include at least one digit")
+        if not re.search(r"[^A-Za-z0-9]", raw_password):
+            raise ValueError("Password must include at least one special character")
+        return value
 
 
 class LoginRequest(APIModel):

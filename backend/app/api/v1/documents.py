@@ -1,68 +1,81 @@
 from __future__ import annotations
 
-import logging
-from dataclasses import dataclass
-from typing import Dict, List, Optional
+import base64
+import json
+from typing import Annotated
 
-logger = logging.getLogger(__name__)
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from ...services.document_management_service import DocumentManagementService
+from ...services.document_service import Document, InMemoryDocumentStore
 
-@dataclass
-class Document:
-    """Represents a student submission."""
-
-    id: str
-    filename: str
-    content: str
-
-
-class InMemoryDocumentStore:
-    """Minimal production-ready in-memory document store."""
-
-    MAX_DOCUMENTS = 10_000
-    MAX_CONTENT_LENGTH = 500_000
-
-    def __init__(self) -> None:
-        self._docs: Dict[str, Document] = {}
-
-    def add_document(self, doc_id: str, filename: str, content: str) -> Document:
-        if not doc_id or not isinstance(doc_id, str):
-            raise ValueError("doc_id must be a non-empty string")
-        if not filename or not isinstance(filename, str):
-            raise ValueError("filename must be a non-empty string")
-        if content is None or not isinstance(content, str):
-            raise ValueError("content must be a non-empty string")
-
-        if len(self._docs) >= self.MAX_DOCUMENTS and doc_id not in self._docs:
-            raise RuntimeError("document store capacity exceeded")
-
-        if len(content) > self.MAX_CONTENT_LENGTH:
-            logger.warning(
-                "Document %s content length %d exceeds MAX_CONTENT_LENGTH=%d; truncating",
-                doc_id,
-                len(content),
-                self.MAX_CONTENT_LENGTH,
-            )
-            content = content[: self.MAX_CONTENT_LENGTH]
-
-        doc = Document(id=doc_id, filename=filename, content=content)
-        self._docs[doc_id] = doc
-        return doc
-
-    def get_document(self, doc_id: str) -> Optional[Document]:
-        if not isinstance(doc_id, str):
-            raise TypeError("doc_id must be a string")
-        return self._docs.get(doc_id)
-
-    def list_documents(self) -> List[Document]:
-        return list(self._docs.values())
-
-    def remove_document(self, doc_id: str) -> None:
-        self._docs.pop(doc_id, None)
-
-    def clear(self) -> None:
-        self._docs.clear()
+router = APIRouter()
+doc_service = DocumentManagementService()
+bearer_scheme = HTTPBearer()
 
 
-__all__ = ["Document", "InMemoryDocumentStore"]
+@router.post("/upload", status_code=status.HTTP_201_CREATED)
+async def upload_document(
+    file: Annotated[UploadFile, File(...)],
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+) -> dict:
+    try:
+        payload_segment = credentials.credentials.split(".")[1]
+        payload_segment += "=" * (-len(payload_segment) % 4)
+        token_payload = json.loads(base64.urlsafe_b64decode(payload_segment).decode("utf-8"))
+    except (IndexError, ValueError, json.JSONDecodeError):
+        raise HTTPException(status_code=401, detail="Invalid token")
 
+    owner_id = token_payload.get("user_id") or token_payload.get("sub")
+    if not owner_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    try:
+        content = await file.read()
+        doc = await doc_service.upload_document(
+            filename=file.filename or "document",
+            content_type=file.content_type or "application/octet-stream",
+            file_content=content,
+            owner_id=owner_id,
+        )
+        return {"message": "Document uploaded", "data": {"document_id": doc["id"]}}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Upload failed")
+
+
+@router.get("/{document_id}", status_code=status.HTTP_200_OK)
+async def get_document(document_id: str) -> dict:
+    doc = await doc_service.get_document(document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"message": "Document retrieved", "data": doc}
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_200_OK)
+async def delete_document(document_id: str) -> dict:
+    success = await doc_service.delete_document(document_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"message": "Document deleted", "data": {"document_id": document_id}}
+
+
+@router.get("/{document_id}/download", status_code=status.HTTP_200_OK)
+async def download_document(document_id: str) -> StreamingResponse:
+    doc = await doc_service.get_document(document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    content = await doc_service.get_document_content(document_id)
+    if not content:
+        raise HTTPException(status_code=500, detail="Document content not available")
+
+    response = StreamingResponse(
+        iter([content.encode("utf-8")]), media_type=doc.get("content_type", "application/octet-stream")
+    )
+    response.headers["Content-Disposition"] = f'attachment; filename="{doc.get("filename", "document")}"'
+    return response
+
+
+__all__ = ["router", "Document", "InMemoryDocumentStore"]

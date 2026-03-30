@@ -21,7 +21,7 @@ class POSTagger:
         except OSError:
             raise RuntimeError(
                 f"spaCy model '{model}' not found. "
-                "Please install it with: python -m spacy download {model}"
+                f"Please install it with: python -m spacy download {model}"
             )
 
     def tag(self, text: str) -> List[str]:

@@ -62,7 +62,7 @@ class AssignmentCreateRequest(APIModel):
 
 
 class AssignmentSummary(APIModel):
-    id: str
+    assignment_id: str
     class_id: str
     filename: str
     content_type: str

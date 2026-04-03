@@ -81,6 +81,17 @@ class ClassRepository:
             classes.append(self._serialize_class_doc(doc))
         return classes
 
+    async def list_user_classes(self, user_id: str) -> list[dict]:
+        """List classes where user is teacher or enrolled student."""
+        db = get_database()
+        collection = db[self.collection_name]
+
+        classes = []
+        query = {"$or": [{"teacher_id": user_id}, {"students": user_id}]}
+        async for doc in collection.find(query):
+            classes.append(self._serialize_class_doc(doc))
+        return classes
+
     async def list_student_classes(self, student_id: str) -> list[dict]:
         """List all classes a student is enrolled in."""
         db = get_database()
@@ -100,6 +111,22 @@ class ClassRepository:
                 {"_id": ObjectId(class_id)},
                 {
                     "$addToSet": {"students": student_id},
+                    "$set": {"updated_at": datetime.utcnow()},
+                },
+            )
+            return result.matched_count > 0
+        except Exception:
+            return False
+
+    async def remove_student_from_class(self, class_id: str, student_id: str) -> bool:
+        """Remove student from class."""
+        try:
+            db = get_database()
+            collection = db[self.collection_name]
+            result = await collection.update_one(
+                {"_id": ObjectId(class_id)},
+                {
+                    "$pull": {"students": student_id},
                     "$set": {"updated_at": datetime.utcnow()},
                 },
             )

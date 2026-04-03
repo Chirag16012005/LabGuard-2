@@ -67,12 +67,12 @@ async def download_document(document_id: str) -> StreamingResponse:
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    content = await doc_service.get_document_content(document_id)
+    content = await doc_service.get_document_binary_content(document_id)
     if not content:
         raise HTTPException(status_code=500, detail="Document content not available")
 
     response = StreamingResponse(
-        iter([content.encode("utf-8")]), media_type=doc.get("content_type", "application/octet-stream")
+        iter([content]), media_type=doc.get("content_type", "application/octet-stream")
     )
     response.headers["Content-Disposition"] = f'attachment; filename="{doc.get("filename", "document")}"'
     return response

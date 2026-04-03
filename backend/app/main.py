@@ -11,9 +11,10 @@ from .db.mongodb import close_mongo_connection, connect_to_mongo
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
 
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000"],  # Next.js default port
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

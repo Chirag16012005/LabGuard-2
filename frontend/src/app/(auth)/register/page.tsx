@@ -22,8 +22,9 @@ export default function RegisterPage() {
   const registerMutation = useMutation({
     mutationFn: (credentials: RegisterCredentials) => registerApi(credentials),
     onSuccess: (data) => {
+      localStorage.setItem("token", data.token);
       setUser(data.user, data.token);
-      router.push("/dashboard");
+      router.push(data.user.role === "teacher" ? "/dashboard/teacher" : "/dashboard/student");
     },
   });
 
@@ -209,7 +210,6 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          {/* Submit button */}
           <button
             id="register-submit"
             type="submit"

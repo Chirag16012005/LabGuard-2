@@ -53,6 +53,12 @@ async def register(payload: RegisterRequest) -> dict:
             "data": {
                 "user_id": user["id"],
                 "email": user["email"],
+                "user": {
+                    "id": user["id"],
+                    "email": user["email"],
+                    "full_name": user.get("full_name"),
+                    "role": user.get("role"),
+                },
                 "access_token": token,
                 "token_type": "bearer",
             },
@@ -78,6 +84,12 @@ async def login(payload: LoginRequest) -> dict:
         "data": {
             "user_id": user["id"],
             "email": user["email"],
+            "user": {
+                "id": user["id"],
+                "email": user["email"],
+                "full_name": user.get("full_name"),
+                "role": user.get("role"),
+            },
             "access_token": token,
             "token_type": "bearer",
         },

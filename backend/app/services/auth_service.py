@@ -65,15 +65,30 @@ class AuthService:
         return user
 
     async def login_user(self, email: str, password: str) -> Optional[dict]:
-        """Authenticate a user."""
+        email = email.lower().strip()
+
         user = await self.user_repo.get_user_by_email(email)
+
+        print("=== LOGIN DEBUG ===")
+        print("INPUT EMAIL:", repr(email))
+        print("INPUT PASSWORD:", repr(password))
+        print("USER FOUND:", user)
+
         if not user:
+            print("❌ USER NOT FOUND")
             return None
 
-        # Verify password
-        if not self.verify_password(password, user.get("password_hash", "")):
+        input_hash = self.hash_password(password)
+        db_hash = user.get("password_hash", "")
+
+        print("INPUT HASH:", input_hash)
+        print("DB HASH:", db_hash)
+
+        if not self.verify_password(password, db_hash):
+            print("❌ PASSWORD MISMATCH")
             return None
 
+        print("✅ LOGIN SUCCESS")
         return user
 
     async def get_user(self, user_id: str) -> Optional[dict]:

@@ -8,11 +8,17 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from ...services.document_management_service import DocumentManagementService
+try:
+    from ...services.document_management_service import DocumentManagementService
+except ModuleNotFoundError:  # keep API importable even if service isn't present
+    DocumentManagementService = None  # type: ignore[assignment]
 from ...services.document_service import Document, InMemoryDocumentStore
 
 router = APIRouter()
-doc_service = DocumentManagementService()
+if DocumentManagementService is not None:
+    doc_service = DocumentManagementService()
+else:
+    doc_service = None
 bearer_scheme = HTTPBearer()
 
 
@@ -21,6 +27,11 @@ async def upload_document(
     file: Annotated[UploadFile, File(...)],
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ) -> dict:
+    if doc_service is None:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Document management service is not available",
+        )
     try:
         payload_segment = credentials.credentials.split(".")[1]
         payload_segment += "=" * (-len(payload_segment) % 4)
@@ -47,6 +58,11 @@ async def upload_document(
 
 @router.get("/{document_id}", status_code=status.HTTP_200_OK)
 async def get_document(document_id: str) -> dict:
+    if doc_service is None:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Document management service is not available",
+        )
     doc = await doc_service.get_document(document_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -55,6 +71,11 @@ async def get_document(document_id: str) -> dict:
 
 @router.delete("/{document_id}", status_code=status.HTTP_200_OK)
 async def delete_document(document_id: str) -> dict:
+    if doc_service is None:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Document management service is not available",
+        )
     success = await doc_service.delete_document(document_id)
     if not success:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -63,6 +84,11 @@ async def delete_document(document_id: str) -> dict:
 
 @router.get("/{document_id}/download", status_code=status.HTTP_200_OK)
 async def download_document(document_id: str) -> StreamingResponse:
+    if doc_service is None:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Document management service is not available",
+        )
     doc = await doc_service.get_document(document_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")

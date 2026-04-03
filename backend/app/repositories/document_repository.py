@@ -14,6 +14,14 @@ class DocumentRepository:
     def __init__(self) -> None:
         self.collection_name = "documents"
 
+    @staticmethod
+    def _serialize_document(doc: dict) -> dict:
+        """Convert MongoDB document into JSON-safe payload."""
+        serialized = dict(doc)
+        serialized["id"] = str(serialized.get("_id"))
+        serialized.pop("_id", None)
+        return serialized
+
     async def create_document(
         self,
         filename: str,
@@ -26,7 +34,12 @@ class DocumentRepository:
         db = get_database()
         collection = db[self.collection_name]
 
+        # Keep a stable explicit `id` field because documents collection has a unique index on `id`.
+        doc_object_id = ObjectId()
+
         doc_data = {
+            "_id": doc_object_id,
+            "id": str(doc_object_id),
             "filename": filename,
             "content_type": content_type,
             "size_bytes": size_bytes,
@@ -36,9 +49,8 @@ class DocumentRepository:
             "updated_at": datetime.utcnow(),
         }
 
-        result = await collection.insert_one(doc_data)
-        doc_data["id"] = str(result.inserted_id)
-        return doc_data
+        await collection.insert_one(doc_data)
+        return self._serialize_document(doc_data)
 
     async def get_document_by_id(self, document_id: str) -> Optional[dict]:
         """Get document by ID."""
@@ -47,8 +59,8 @@ class DocumentRepository:
             collection = db[self.collection_name]
             doc = await collection.find_one({"_id": ObjectId(document_id)})
             if doc:
-                doc["id"] = str(doc["_id"])
-            return doc
+                return self._serialize_document(doc)
+            return None
         except Exception:
             return None
 
@@ -69,6 +81,5 @@ class DocumentRepository:
 
         docs = []
         async for doc in collection.find({"owner_id": owner_id}):
-            doc["id"] = str(doc["_id"])
-            docs.append(doc)
+            docs.append(self._serialize_document(doc))
         return docs

@@ -20,6 +20,7 @@ async def ensure_indexes() -> None:
     await db["documents"].create_index(
         [("id", ASCENDING)], unique=True, name="documents_id_unique"
     )
+
     await db["reports"].create_index(
         [("report_id", ASCENDING)], unique=True, name="reports_report_id_unique"
     )

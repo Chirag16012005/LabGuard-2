@@ -3,15 +3,15 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from .v1 import (
-	assignments,
-	auth,
-	classes,
-	clusters,
-	comparisons,
-	detection,
-	documents,
-	reports,
-	submissions,
+    assignments,
+    auth,
+    classes,
+    clusters,
+    comparisons,
+    detection,
+    documents,
+    reports,
+    submissions,
 )
 
 router = APIRouter()

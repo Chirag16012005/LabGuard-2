@@ -41,12 +41,9 @@ class ClassService:
         """Get class details."""
         return await self.class_repo.get_class_by_id(class_id)
 
-    async def list_my_classes(self, user_id: str, role: str) -> list[dict]:
-        """List classes for a user (teacher or student)."""
-        if role == "teacher":
-            return await self.class_repo.list_teacher_classes(user_id)
-        else:
-            return await self.class_repo.list_student_classes(user_id)
+    async def list_my_classes(self, user_id: str) -> list[dict]:
+        """List classes for a user without role-based filtering."""
+        return await self.class_repo.list_user_classes(user_id)
 
     async def delete_class(self, class_id: str) -> bool:
         """Delete a class."""
@@ -63,6 +60,17 @@ class ClassService:
             raise ValueError("Join code does not match this class")
 
         return await self.class_repo.add_student_to_class(class_id, student_id)
+
+    async def leave_class(self, class_id: str, student_id: str) -> bool:
+        """Leave a class by removing enrolled student."""
+        class_doc = await self.class_repo.get_class_by_id(class_id)
+        if not class_doc:
+            raise ValueError("Class not found")
+
+        if student_id not in class_doc.get("students", []):
+            raise ValueError("Student is not enrolled in this class")
+
+        return await self.class_repo.remove_student_from_class(class_id, student_id)
 
     async def list_class_students(self, class_id: str) -> list[dict]:
         """List all students in a class with safe profile fields."""

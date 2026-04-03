@@ -16,6 +16,33 @@ auth_service = AuthService()
 bearer_scheme = HTTPBearer()
 
 
+def _decode_token_payload(credentials: HTTPAuthorizationCredentials) -> dict:
+    try:
+        payload_segment = credentials.credentials.split(".")[1]
+        payload_segment += "=" * (-len(payload_segment) % 4)
+        return json.loads(base64.urlsafe_b64decode(payload_segment).decode("utf-8"))
+    except (IndexError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=401, detail="Invalid token") from exc
+
+
+async def _get_requester_context(
+    credentials: HTTPAuthorizationCredentials,
+) -> tuple[str, str]:
+    token_payload = _decode_token_payload(credentials)
+    requester_id = token_payload.get("user_id") or token_payload.get("sub")
+    role = token_payload.get("role")
+    if not requester_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    if not role:
+        requester = await auth_service.get_user(requester_id)
+        role = requester.get("role") if requester else None
+    if not role:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    return requester_id, role
+
+
 class CreateClassRequest(BaseModel):
     name: str
     class_code: str
@@ -33,26 +60,7 @@ async def create_class(
     payload: CreateClassRequest,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ) -> dict:
-    try:
-        payload_segment = credentials.credentials.split(".")[1]
-        payload_segment += "=" * (-len(payload_segment) % 4)
-        token_payload = json.loads(
-            base64.urlsafe_b64decode(payload_segment).decode("utf-8")
-        )
-    except (IndexError, ValueError, json.JSONDecodeError):
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    teacher_id = token_payload.get("user_id") or token_payload.get("sub")
-    role = token_payload.get("role")
-    if not teacher_id:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    if not role:
-        user = await auth_service.get_user(teacher_id)
-        role = user.get("role") if user else None
-    if not role:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
+    teacher_id, role = await _get_requester_context(credentials)
     if role not in {"teacher", "admin"}:
         raise HTTPException(status_code=403, detail="Only teacher can create class")
 
@@ -75,27 +83,12 @@ async def create_class(
 async def list_my_classes(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ) -> dict:
-    try:
-        payload_segment = credentials.credentials.split(".")[1]
-        payload_segment += "=" * (-len(payload_segment) % 4)
-        token_payload = json.loads(
-            base64.urlsafe_b64decode(payload_segment).decode("utf-8")
-        )
-    except (IndexError, ValueError, json.JSONDecodeError):
-        raise HTTPException(status_code=401, detail="Invalid token")
-
+    token_payload = _decode_token_payload(credentials)
     user_id = token_payload.get("user_id") or token_payload.get("sub")
-    role = token_payload.get("role")
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    if not role:
-        user = await auth_service.get_user(user_id)
-        role = user.get("role") if user else None
-    if not role:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    classes = await class_service.list_my_classes(user_id, role)
+    classes = await class_service.list_my_classes(user_id)
     return {"message": "Classes retrieved", "data": classes}
 
 
@@ -112,26 +105,7 @@ async def delete_class(
     class_id: str,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ) -> dict:
-    try:
-        payload_segment = credentials.credentials.split(".")[1]
-        payload_segment += "=" * (-len(payload_segment) % 4)
-        token_payload = json.loads(
-            base64.urlsafe_b64decode(payload_segment).decode("utf-8")
-        )
-    except (IndexError, ValueError, json.JSONDecodeError):
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    requester_id = token_payload.get("user_id") or token_payload.get("sub")
-    role = token_payload.get("role")
-    if not requester_id:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    if not role:
-        requester = await auth_service.get_user(requester_id)
-        role = requester.get("role") if requester else None
-    if not role:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
+    requester_id, role = await _get_requester_context(credentials)
     if role not in {"teacher", "admin"}:
         raise HTTPException(status_code=403, detail="Only teacher can delete class")
 
@@ -184,6 +158,31 @@ async def join_class(
         raise HTTPException(status_code=500, detail="Failed to join class")
 
 
+@router.delete("/{class_id}/leave", status_code=status.HTTP_200_OK)
+async def leave_class(
+    class_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+) -> dict:
+    student_id, role = await _get_requester_context(credentials)
+    if role != "student":
+        raise HTTPException(status_code=403, detail="Only students can leave class")
+
+    try:
+        success = await class_service.leave_class(class_id, student_id)
+        if not success:
+            raise HTTPException(status_code=400, detail="Failed to leave class")
+        return {"message": "Left class successfully", "data": {"class_id": class_id}}
+    except ValueError as e:
+        detail = str(e)
+        if detail == "Class not found":
+            raise HTTPException(status_code=404, detail=detail)
+        raise HTTPException(status_code=400, detail=detail)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to leave class")
+
+
 @router.get("/{class_id}/students", status_code=status.HTTP_200_OK)
 async def list_class_students(
     class_id: str,
@@ -199,28 +198,12 @@ async def list_class_students(
         raise HTTPException(status_code=401, detail="Invalid token")
 
     requester_id = token_payload.get("user_id") or token_payload.get("sub")
-    role = token_payload.get("role")
     if not requester_id:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    if not role:
-        requester = await auth_service.get_user(requester_id)
-        role = requester.get("role") if requester else None
-    if not role:
         raise HTTPException(status_code=401, detail="Invalid token")
 
     class_doc = await class_service.get_class(class_id)
     if not class_doc:
         raise HTTPException(status_code=404, detail="Class not found")
-
-    # Allow access for admin, class teacher, or enrolled student.
-    is_admin = role == "admin"
-    is_teacher = class_doc.get("teacher_id") == requester_id
-    is_enrolled_student = requester_id in class_doc.get("students", [])
-    if not (is_admin or is_teacher or is_enrolled_student):
-        raise HTTPException(
-            status_code=403, detail="Not authorized to view class students"
-        )
 
     students = await class_service.list_class_students(class_id)
     return {

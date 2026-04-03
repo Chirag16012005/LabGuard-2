@@ -61,16 +61,23 @@ class ClassService:
 
         return await self.class_repo.add_student_to_class(class_id, student_id)
 
-    async def leave_class(self, class_id: str, student_id: str) -> bool:
-        """Leave a class by removing enrolled student."""
-        class_doc = await self.class_repo.get_class_by_id(class_id)
+    async def join_class_by_code(self, join_code: str, student_id: str) -> dict:
+        """Join a class using only the join code."""
+        normalized_code = join_code.strip().upper()
+        class_doc = await self.class_repo.get_class_by_join_code(normalized_code)
         if not class_doc:
-            raise ValueError("Class not found")
+            raise ValueError("Invalid join code")
 
-        if student_id not in class_doc.get("students", []):
-            raise ValueError("Student is not enrolled in this class")
+        class_id = class_doc["class_id"]
 
-        return await self.class_repo.remove_student_from_class(class_id, student_id)
+        if student_id in class_doc.get("students", []):
+            raise ValueError("Already enrolled in this class")
+
+        success = await self.class_repo.add_student_to_class(class_id, student_id)
+        if not success:
+            raise ValueError("Failed to join class")
+
+        return {"class_id": class_id, "name": class_doc.get("name", "")}
 
     async def list_class_students(self, class_id: str) -> list[dict]:
         """List all students in a class with safe profile fields."""

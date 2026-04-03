@@ -1,27 +1,31 @@
-import { create } from 'zustand';
+import { create } from "zustand";
+import { AuthState, User } from "@/types/auth";
+import { clearPersistedAuth, getPersistedToken, getPersistedUser, persistAuth } from "@/lib/api-client";
 
-interface User {
-  id: string;
-  name: string;
-  email?: string;
-}
+const initialUser = getPersistedUser();
+const initialToken = getPersistedToken();
+const initialAuthenticated = Boolean(initialUser && initialToken);
 
-interface AuthStore {
-  user: User | null;
-  role: "student" | "teacher" | null;
-  setUser: (user: User, role: "student" | "teacher") => void;
-  logout: () => void;
-}
+export const useAuthStore = create<AuthState>((set) => ({
+  user: initialUser,
+  token: initialToken,
+  isAuthenticated: initialAuthenticated,
 
-// Default state with mock role = "student"
-export const useAuthStore = create<AuthStore>((set) => ({
-  user: {
-    id: "mock123",
-    name: "Mock Student",
+  setUser: (user: User, token: string) => {
+    persistAuth(user, token);
+    set({
+      user,
+      token,
+      isAuthenticated: true,
+    });
   },
-  role: "student",
-  
-  setUser: (user, role) => set({ user, role }),
-  
-  logout: () => set({ user: null, role: null }),
+
+  logout: () => {
+    clearPersistedAuth();
+    set({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+    });
+  },
 }));

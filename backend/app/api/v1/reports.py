@@ -1,11 +1,11 @@
-from __future__ import annotations
+# from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+# from fastapi import APIRouter, HTTPException, status
 
-from ...services.report_service import ReportService
+# from ...services.report_service import ReportService
 
-router = APIRouter()
-report_service = ReportService()
+# router = APIRouter()
+# report_service = ReportService()
 
 
 @router.get("/reports/student/{student_report_id}", status_code=status.HTTP_200_OK)

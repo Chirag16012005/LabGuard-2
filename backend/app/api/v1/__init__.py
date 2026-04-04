@@ -1,23 +1,10 @@
-from . import (
-    assignments,
-    auth,
-    classes,
-    clusters,
-    comparisons,
-    detection,
-    documents,
-    reports,
-    submissions,
-)
+from . import assignments, auth, classes, detection, documents, reports
 
 __all__ = [
     "assignments",
     "auth",
     "classes",
-    "clusters",
-    "comparisons",
     "detection",
     "documents",
     "reports",
-    "submissions",
 ]

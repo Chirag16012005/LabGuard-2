@@ -1,30 +1,26 @@
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Course } from "@/lib/api";
 
 interface CourseCardProps {
   course: Course;
+  /** Base path for the link. Defaults to "/dashboard/course" (teacher route). */
+  basePath?: string;
 }
 
-export const CourseCard = ({ course }: CourseCardProps) => {
-  const router = useRouter();
-
-  const handleClick = () => {
-    router.push(`/dashboard/course/${course.id}`);
-  };
-
+export function CourseCard({
+  course,
+  basePath = "/dashboard/course",
+}: CourseCardProps) {
   return (
-    <div
-      onClick={handleClick}
-      className="bg-white border border-slate-200 rounded-xl p-5 cursor-pointer transition-all duration-300 hover:-translate-y-[2px] hover:border-sky-400 hover:shadow-sm dark:bg-slate-900/50 dark:border-slate-800 dark:hover:border-sky-500 dark:hover:shadow-none"
-    >
-      <h3 className="text-lg font-bold mb-1 text-slate-800 dark:text-slate-100">{course.title}</h3>
-      <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{course.teacher}</p>
-      
-      <div className="flex items-center text-sm font-medium">
-        <span className="bg-sky-50 text-sky-700 border border-sky-100 dark:bg-sky-900/30 dark:text-sky-300 dark:border-sky-800/50 px-2.5 py-1 rounded-md">
-          {course.assignmentsCount} Assignment{course.assignmentsCount !== 1 ? 's' : ''}
-        </span>
+    <Link href={`${basePath}/${course.id}`}>
+      <div className="border border-slate-200 rounded-xl p-5 hover:translate-y-[-1px] transition-all duration-200 bg-white hover:border-slate-300 flex flex-col gap-3 group dark:bg-slate-900 dark:border-slate-800 dark:hover:border-slate-700">
+        <h3 className="font-semibold text-lg text-slate-800 group-hover:text-blue-600 transition-colors dark:text-slate-100 dark:group-hover:text-blue-400">
+          {course.title}
+        </h3>
+        <p className="text-sm text-slate-500 font-medium dark:text-slate-400">
+          {course.subtitle}
+        </p>
       </div>
-    </div>
+    </Link>
   );
-};
+}

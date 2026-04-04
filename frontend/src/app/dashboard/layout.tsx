@@ -1,12 +1,13 @@
 "use client";
 
 import { useAuthStore } from "@/store/authStore";
-import { LogOut, LayoutDashboard, FileText, Activity } from "lucide-react";
+import { LogOut, LayoutDashboard, FileText, BookOpen } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import clsx from "clsx";
 import { twMerge } from "tailwind-merge";
+import { logoutApi } from "@/lib/api-client";
 
 function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
@@ -17,27 +18,38 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  // const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    // setMounted(true);
     if (!user) {
       router.push("/login");
     }
   }, [user, router]);
 
-  if (!mounted || !user) return null;
+  if (!user) return null;
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await logoutApi();
+    } catch {
+      // Best-effort: even if server logout fails, clear local session.
+    }
     logout();
     router.push("/login");
   };
 
-  const navItems = [
-    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-    { name: "Documents", href: "/dashboard/documents", icon: FileText },
-    { name: "Reports", href: "/dashboard/reports", icon: Activity },
-  ];
+  const navItems =
+    user.role === "teacher"
+      ? [
+          { name: "Dashboard", href: "/dashboard/teacher", icon: LayoutDashboard },
+          { name: "Courses", href: "/dashboard/courses", icon: FileText },
+        ]
+      : [
+          { name: "Dashboard", href: "/dashboard/student", icon: LayoutDashboard },
+          { name: "Courses", href: "/dashboard/student", icon: BookOpen },
+          { name: "Documents", href: "/dashboard/documents", icon: FileText },
+        ];
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100">
@@ -65,7 +77,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               const isActive = pathname === item.href;
               return (
                 <Link 
-                  key={item.href}
+                  key={item.name}
                   href={item.href} 
                   onClick={() => setSidebarOpen(false)}
                   className={cn(

@@ -4,10 +4,16 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
 from ...services.detection_service import PlagiarismConfig, PlagiarismDetector
-from ...services.detection_orchestration_service import DetectionOrchestrationService
+try:
+    from ...services.detection_orchestration_service import DetectionOrchestrationService
+except ModuleNotFoundError:  # keep API importable even if orchestration isn't present
+    DetectionOrchestrationService = None  # type: ignore[assignment]
 
 router = APIRouter()
-detection_service = DetectionOrchestrationService()
+if DetectionOrchestrationService is not None:
+    detection_service = DetectionOrchestrationService()
+else:
+    detection_service = None
 
 
 class DetectionRunRequest(BaseModel):
@@ -17,6 +23,11 @@ class DetectionRunRequest(BaseModel):
 @router.post("/run", status_code=status.HTTP_202_ACCEPTED)
 async def run_detection(payload: DetectionRunRequest) -> dict:
     try:
+        if detection_service is None:
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail="Detection orchestration service is not available",
+            )
         result = await detection_service.run_detection(payload.assignment_id)
         return {"message": "Detection started", "data": result}
     except Exception as e:

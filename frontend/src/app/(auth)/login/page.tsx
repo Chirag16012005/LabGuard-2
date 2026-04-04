@@ -20,8 +20,9 @@ export default function LoginPage() {
   const loginMutation = useMutation({
     mutationFn: (credentials: LoginCredentials) => loginApi(credentials),
     onSuccess: (data) => {
+      localStorage.setItem("token", data.token);
       setUser(data.user, data.token); // Assume teacher or student comes from backend payload
-      router.push("/dashboard");
+      router.push(data.user.role === "teacher" ? "/dashboard/teacher" : "/dashboard/student");
     },
   });
 

@@ -92,6 +92,36 @@ async def list_my_classes(
     return {"message": "Classes retrieved", "data": classes}
 
 
+@router.post("/join", status_code=status.HTTP_200_OK)
+async def join_class_by_code(
+    payload: JoinClassRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+) -> dict:
+    """Join a class using only the join code (no class_id needed)."""
+    try:
+        payload_segment = credentials.credentials.split(".")[1]
+        payload_segment += "=" * (-len(payload_segment) % 4)
+        token_payload = json.loads(
+            base64.urlsafe_b64decode(payload_segment).decode("utf-8")
+        )
+    except (IndexError, ValueError, json.JSONDecodeError):
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    student_id = token_payload.get("user_id") or token_payload.get("sub")
+    if not student_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    try:
+        result = await class_service.join_class_by_code(payload.join_code, student_id)
+        return {"message": "Joined class successfully", "data": result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to join class")
+
+
 @router.get("/{class_id}", status_code=status.HTTP_200_OK)
 async def get_class_details(class_id: str) -> dict:
     class_doc = await class_service.get_class(class_id)

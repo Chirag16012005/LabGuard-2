@@ -16,9 +16,10 @@ async def get_student_report_by_id(student_report_id: str) -> dict:
 		raise HTTPException(status_code=404, detail="Student report entry not found")
 	return {"message": "Student report entry retrieved", "data": entry}
 
-
 @router.get("/assignments/{assignment_id}/reports", status_code=status.HTTP_200_OK)
 async def list_assignment_reports(assignment_id: str) -> dict:
+	reports = await report_service.list_assignment_reports(assignment_id)
+	return {"message": "Reports retrieved", "data": reports}
 	reports = await report_service.list_assignment_reports(assignment_id)
 	return {"message": "Reports retrieved", "data": reports}
 
@@ -29,6 +30,9 @@ async def get_report_matches(report_id: str) -> dict:
 	if not result:
 		raise HTTPException(status_code=404, detail="Report not found")
 	return {"message": "Matches retrieved", "data": result}
-
+	result = await report_service.get_report_matches(report_id)
+	if not result:
+		raise HTTPException(status_code=404, detail="Report not found")
+	return {"message": "Matches retrieved", "data": result}
 
 

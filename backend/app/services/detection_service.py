@@ -325,6 +325,11 @@ class PlagiarismDetector:
                         similarity_score,
                     ]
 
+            # 🔥 Ensure all documents appear in comparisons (even if 0 similarity)
+            for other_doc_id in docs.keys():
+                if other_doc_id != doc_id and other_doc_id not in doc_group:
+                    doc_group[other_doc_id] = [[], 0.0]
+
             # 🔥 STEP 3: Overall plagiarism score based on merged passages
             all_passages_flat = []
             for target_doc_id, (passages_list, _) in doc_group.items():

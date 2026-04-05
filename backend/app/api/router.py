@@ -7,7 +7,6 @@ from .v1 import (
     auth,
     classes,
     clusters,
-    comparisons,
     detection,
     documents,
     reports,
@@ -23,5 +22,4 @@ router.include_router(documents.router, prefix="/documents", tags=["Documents"])
 router.include_router(submissions.router, tags=["Submissions"])
 router.include_router(detection.router, prefix="/detection", tags=["Detection"])
 router.include_router(reports.router, tags=["Reports"])
-router.include_router(comparisons.router, prefix="/comparisons", tags=["Comparisons"])
 router.include_router(clusters.router, tags=["Clusters"])

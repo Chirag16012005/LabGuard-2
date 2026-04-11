@@ -2,14 +2,22 @@ import { create } from "zustand";
 import { AuthState, User } from "@/types/auth";
 import { clearPersistedAuth, getPersistedToken, getPersistedUser, persistAuth } from "@/lib/api-client";
 
-const initialUser = getPersistedUser();
-const initialToken = getPersistedToken();
-const initialAuthenticated = Boolean(initialUser && initialToken);
-
 export const useAuthStore = create<AuthState>((set) => ({
-  user: initialUser,
-  token: initialToken,
-  isAuthenticated: initialAuthenticated,
+  user: null,
+  token: null,
+  isAuthenticated: false,
+  hydrated: false,
+
+  hydrateFromStorage: () => {
+    const user = getPersistedUser();
+    const token = getPersistedToken();
+    set({
+      user,
+      token,
+      isAuthenticated: Boolean(user && token),
+      hydrated: true,
+    });
+  },
 
   setUser: (user: User, token: string) => {
     persistAuth(user, token);
@@ -17,6 +25,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       user,
       token,
       isAuthenticated: true,
+      hydrated: true,
     });
   },
 
@@ -26,6 +35,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       user: null,
       token: null,
       isAuthenticated: false,
+      hydrated: true,
     });
   },
 }));

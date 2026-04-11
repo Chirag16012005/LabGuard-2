@@ -149,7 +149,7 @@ export default function Home() {
                 </li>
                 <li className="flex items-start gap-3">
                   <div className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-300" />
-                  <p>Detect plagiarism across internet sources and your own students.</p>
+                  <p>Detect plagiarism across your own students.</p>
                 </li>
                 <li className="flex items-start gap-3">
                   <div className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-300" />

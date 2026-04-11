@@ -14,6 +14,7 @@ export function FileInput({ onFileChange, accept = ".pdf", id = "file-upload" }:
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
+    console.log('Document upload - File selected:', file?.name, 'Size:', file?.size, 'Type:', file?.type);
     setSelectedFile(file);
     onFileChange(file);
   };

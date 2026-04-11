@@ -95,7 +95,11 @@ export default function StudentCourseDetailPage() {
       {!isError && assignments && assignments.length > 0 && (
         <div className="space-y-3">
           {assignments.map((assignment) => (
-            <AssignmentCard key={assignment.id} assignment={assignment} />
+            <AssignmentCard 
+              key={assignment.id} 
+              assignment={assignment} 
+              href={`/dashboard/student/courses/${courseId}/assignment/${assignment.id}`}
+            />
           ))}
         </div>
       )}

@@ -23,12 +23,33 @@ type BackendClass = {
   student_count?: number;
 };
 
+// Mirrors AssignmentSummary / AssignmentDetails from assignment_schema.py
 type BackendAssignment = {
-  id: string;
+  assignment_id: string;
   class_id: string;
   filename: string;
+  content_type: string;
+  file_type: "pdf" | "doc" | "docx" | "txt" | "ppt" | "pptx" | "xls" | "xlsx" | "csv" | "image" | "other";
+  size_bytes: number;
+  status: "draft" | "published" | "closed";
+  submission_count: number;
+  created_at: string;
+  // AssignmentDetails extras
   description?: string | null;
+  storage_path?: string | null;
+  // Stored in MongoDB but not in strict schema
   due_date?: string | null;
+  title?: string | null;
+};
+
+type BackendSubmission = {
+  id?: string | null;
+  assignment_id: string;
+  student_id: string;
+  student_name: string;
+  document_id?: string | null;
+  status: "submitted" | "processing" | "failed" | "not_submitted";
+  submitted_at?: string | null;
 };
 
 /* ------------------------------------------------------------------ */
@@ -46,11 +67,29 @@ function mapCourse(c: BackendClass): Course {
 
 function mapAssignment(a: BackendAssignment): Assignment {
   return {
-    id: a.id,
+    id: a.assignment_id,
     courseId: a.class_id,
-    title: a.filename,
+    title: a.title ?? a.filename,
     description: a.description ?? "",
     dueDate: a.due_date ?? undefined,
+  };
+}
+
+export type Submission = {
+  id?: string | null;
+  assignmentId: string;
+  studentName: string;
+  status: "submitted" | "processing" | "failed" | "not_submitted";
+  submittedAt?: string | null;
+};
+
+function mapSubmission(s: BackendSubmission): Submission {
+  return {
+    id: s.id,
+    assignmentId: s.assignment_id,
+    studentName: s.student_name,
+    status: s.status,
+    submittedAt: s.submitted_at,
   };
 }
 
@@ -135,3 +174,59 @@ export const useJoinClass = () => {
     },
   });
 };
+
+/* ------------------------------------------------------------------ */
+/*  Submit Assignment                                                 */
+/* ------------------------------------------------------------------ */
+
+export const submitAssignment = async (
+  assignmentId: string,
+  file: File
+): Promise<Submission> => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await apiClient.post<ApiEnvelope<{ submission_id: string; submission: BackendSubmission }>>(
+    `/assignments/${assignmentId}/submit`,
+    formData,
+    { headers: { "Content-Type": "multipart/form-data" } }
+  );
+
+  // If the backend returns a single submission in 'submission' field
+  // or we need to fetch it? The user said "Return: ... submissions: [SubmissionSummary] (or single submission if preferred)"
+  // I will assume the backend returns the created submission.
+  return mapSubmission(res.data.data.submission);
+};
+
+export const useSubmitAssignment = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ assignmentId, file }: { assignmentId: string; file: File }) =>
+      submitAssignment(assignmentId, file),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["submission", variables.assignmentId],
+      });
+    },
+  });
+};
+
+export const fetchStudentSubmission = async (
+  assignmentId: string
+): Promise<Submission | null> => {
+  try {
+    const res = await apiClient.get<ApiEnvelope<BackendSubmission>>(
+      `/assignments/${assignmentId}/my-submission`
+    );
+    return mapSubmission(res.data.data);
+  } catch (error) {
+    return null;
+  }
+};
+
+export const useStudentSubmission = (assignmentId: string) =>
+  useQuery({
+    queryKey: ["submission", assignmentId],
+    queryFn: () => fetchStudentSubmission(assignmentId),
+    enabled: !!assignmentId,
+  });

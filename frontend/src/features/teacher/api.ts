@@ -10,34 +10,79 @@ type ApiEnvelope<T> = {
   data: T;
 };
 
+type AssignmentReport = {
+  report_id?: string;
+  assignment_id?: string;
+  generated_at?: string | null;
+  [key: string]: unknown;
+};
+
+export type StudentReportEntry = {
+  student_report_id: string;
+  report_id?: string;
+  assignment_id?: string;
+  document_id?: string;
+  plagiarism_score?: number;
+  comparisons?: unknown;
+  [key: string]: unknown;
+};
+
 type BackendClass = {
   class_id: string;
   name: string;
   section?: string | null;
   class_code?: string;
+  join_code?: string;
 };
 
+// Mirrors AssignmentSummary / AssignmentDetails from assignment_schema.py
 type BackendAssignment = {
-  id: string;
+  assignment_id: string;
   class_id: string;
   filename: string;
+  content_type: string;
+  file_type: "pdf" | "doc" | "docx" | "txt" | "ppt" | "pptx" | "xls" | "xlsx" | "csv" | "image" | "other";
+  size_bytes: number;
+  status: "draft" | "published" | "closed";
+  submission_count: number;
+  created_at: string;
+  // AssignmentDetails extras
   description?: string | null;
+  storage_path?: string | null;
+  // Stored in repo but not in schema
+  due_date?: string | null;
+  title?: string | null;
 };
 
 type BackendSubmission = {
-  id: string;
+  id?: string | null;
   assignment_id: string;
   student_id: string;
-  status: "submitted" | "processing" | "failed";
-  submitted_at?: string;
+  student_name: string;
+  document_id?: string | null;
+  status: "submitted" | "processing" | "failed" | "not_submitted";
+  submitted_at?: string | null;
 };
-
-export interface Submission {
+export interface CourseStudent {
   id: string;
+  fullName: string;
+  email: string;
+}
+
+// Add this type for the backend response
+type BackendStudent = {
+  id: string;
+  full_name: string;
+  email: string;
+};
+export interface Submission {
+  id?: string | null;
   assignmentId: string;
+  studentId: string;
   studentName: string;
-  status: "submitted" | "not_submitted";
-  submittedAt?: string;
+  status: "submitted" | "processing" | "failed" | "not_submitted";
+  submittedAt?: string | null;
+  documentId?: string | null;
 }
 
 function mapCourse(course: BackendClass): Course {
@@ -45,15 +90,17 @@ function mapCourse(course: BackendClass): Course {
     id: course.class_id,
     title: course.name,
     subtitle: [course.class_code, course.section].filter(Boolean).join(" • ") || "Class",
+    joinCode: course.join_code,
   };
 }
 
-function mapAssignment(assignment: BackendAssignment): Assignment {
+function mapAssignment(a: BackendAssignment): Assignment {
   return {
-    id: assignment.id,
-    courseId: assignment.class_id,
-    title: assignment.filename,
-    description: assignment.description ?? "",
+    id: a.assignment_id,
+    courseId: a.class_id,
+    title: a.title ?? a.filename,
+    description: a.description ?? "",
+    dueDate: a.due_date ?? undefined,
   };
 }
 
@@ -61,9 +108,11 @@ function mapSubmission(submission: BackendSubmission): Submission {
   return {
     id: submission.id,
     assignmentId: submission.assignment_id,
-    studentName: submission.student_id,
-    status: submission.status === "submitted" ? "submitted" : "not_submitted",
+    studentId: submission.student_id,
+    studentName: submission.student_name,
+    status: submission.status as Submission["status"],
     submittedAt: submission.submitted_at,
+    documentId: submission.document_id,
   };
 }
 
@@ -86,6 +135,7 @@ export const fetchAssignments = async (courseId: string): Promise<Assignment[]> 
 };
 
 export const fetchAssignmentById = async (assignmentId: string): Promise<Assignment | undefined> => {
+  // Response shape: AssignmentDetailResponse => { assignment: AssignmentDetails }
   const res = await apiClient.get<ApiEnvelope<{ assignment: BackendAssignment }>>(
     `/assignments/${assignmentId}`
   );
@@ -99,18 +149,81 @@ export const fetchSubmissions = async (assignmentId: string): Promise<Submission
   return (res.data.data.submissions ?? []).map(mapSubmission);
 };
 
-export const createAssignment = async (data: Omit<Assignment, "id">): Promise<Assignment> => {
-  const res = await apiClient.post<
-    ApiEnvelope<{ assignment: BackendAssignment }>
-  >(`/classes/${data.courseId}/assignments`, {
-    filename: data.title,
-    content_type: "application/pdf",
-    size_bytes: 1,
-    file_type: "pdf",
-    description: data.description,
+export const runPlagiarismCheck = async (assignmentId: string): Promise<unknown> => {
+  const res = await apiClient.post<ApiEnvelope<unknown>>(`/detection/run`, {
+    assignment_id: assignmentId,
   });
+  return res.data.data;
+};
+
+export const fetchAssignmentReports = async (assignmentId: string): Promise<AssignmentReport[]> => {
+  const res = await apiClient.get<ApiEnvelope<AssignmentReport[]>>(
+    `/assignments/${assignmentId}/reports`
+  );
+  return res.data.data;
+};
+
+export const fetchStudentReport = async (studentReportId: string): Promise<StudentReportEntry> => {
+  const res = await apiClient.get<ApiEnvelope<StudentReportEntry>>(
+    `/reports/student/${studentReportId}`
+  );
+  return res.data.data;
+};
+
+export const getLatestReport = <T extends { generated_at?: string | null }>(reports: T[]): T | undefined => {
+  const sorted = [...(reports ?? [])].sort((a, b) => {
+    const aParsed = a?.generated_at ? Date.parse(a.generated_at) : 0;
+    const bParsed = b?.generated_at ? Date.parse(b.generated_at) : 0;
+    const aTime = Number.isFinite(aParsed) ? aParsed : 0;
+    const bTime = Number.isFinite(bParsed) ? bParsed : 0;
+    return bTime - aTime;
+  });
+  return sorted[0];
+};
+
+export interface CourseStudent {
+  id: string;
+  fullName: string;
+  email: string;
+}
+
+export const fetchCourseStudents = async (courseId: string): Promise<CourseStudent[]> => {
+  const res = await apiClient.get<ApiEnvelope<{ class_id: string; students: BackendStudent[] }>>(
+    `/classes/${courseId}/students`
+  );
+  return (res.data.data.students ?? []).map((s:BackendStudent) => ({
+    id: s.id,
+    fullName: s.full_name,
+    email: s.email,
+  }));
+};
+
+export interface CreateAssignmentInput {
+  courseId: string;
+  title: string;
+  description: string;
+  dueDate?: string;
+  file: File;
+}
+
+export const createAssignment = async (data: CreateAssignmentInput): Promise<Assignment> => {
+  const formData = new FormData();
+  formData.append("file", data.file);
+  if (data.description) formData.append("description", data.description);
+  if (data.dueDate) formData.append("due_date", data.dueDate);
+
+  // Response shape: AssignmentCreateResponse => { assignment: AssignmentDetails }
+  const res = await apiClient.post<ApiEnvelope<{ assignment: BackendAssignment }>>(
+    `/classes/${data.courseId}/assignments`,
+    formData,
+    { headers: { "Content-Type": "multipart/form-data" } }
+  );
 
   return mapAssignment(res.data.data.assignment);
+};
+
+export const deleteAssignment = async (assignmentId: string): Promise<void> => {
+  await apiClient.delete(`/assignments/${assignmentId}`);
 };
 
 // React Query Hooks
@@ -149,6 +262,13 @@ export const useSubmissions = (assignmentId: string) => {
   });
 };
 
+export const useCourseStudents = (courseId: string) => {
+  return useQuery({
+    queryKey: ["course-students", courseId],
+    queryFn: () => fetchCourseStudents(courseId),
+  });
+};
+
 export const useCreateAssignment = () => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -159,21 +279,49 @@ export const useCreateAssignment = () => {
   });
 };
 
+export const useDeleteAssignment = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteAssignment,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["assignments"] });
+    },
+  });
+};
+
+export const useRunPlagiarism = () => {
+  return useMutation({
+    mutationFn: async (assignmentId: string) => {
+      await runPlagiarismCheck(assignmentId);
+      const reports = await fetchAssignmentReports(assignmentId);
+      return getLatestReport(reports);
+    },
+  });
+};
+
+export const useStudentReport = (studentReportId: string | null | undefined) => {
+  return useQuery({
+    queryKey: ["student-report", studentReportId],
+    queryFn: () => fetchStudentReport(studentReportId as string),
+    enabled: Boolean(studentReportId),
+  });
+};
+
 /* ------------------------------------------------------------------ */
 /*  Create Course (Class)                                             */
 /* ------------------------------------------------------------------ */
 
-export interface CreateCoursePayload {
-  name: string;
-  class_code: string;
-  description: string;
-  section?: string;
-}
+  export interface CreateCoursePayload {
+    name: string;
+    class_code: string;
+    description: string;
+    section?: string;
+  }
 
-export interface CreateCourseResult {
-  classId: string;
-  joinCode: string;
-}
+  export interface CreateCourseResult {
+    classId: string;
+    joinCode: string;
+  }
 
 export const createCourse = async (
   data: CreateCoursePayload

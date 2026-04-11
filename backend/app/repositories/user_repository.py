@@ -61,6 +61,21 @@ class UserRepository:
         except Exception:
             return None
 
+    async def get_users_by_ids(self, user_ids: list[str]) -> list[dict]:
+        """Get multiple users by their IDs."""
+        try:
+            db = get_database()
+            collection = db[self.collection_name]
+            object_ids = [ObjectId(uid) for uid in user_ids]
+            
+            users = []
+            async for user in collection.find({"_id": {"$in": object_ids}}):
+                user["id"] = str(user["_id"])
+                users.append(user)
+            return users
+        except Exception:
+            return []
+
     async def user_exists(self, email: str) -> bool:
         """Check if user exists."""
         db = get_database()

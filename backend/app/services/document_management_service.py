@@ -41,13 +41,17 @@ class DocumentManagementService:
             owner_id=owner_id,
             storage_path=storage_path,
         )
+        print(f"DEBUG: Created document metadata: {doc_metadata}")
+        print(f"DEBUG: Document ID: {doc_metadata.get('id')}")
 
-        # Store file content in memory under the same ID returned by the database.
-        self.store.add_document(
-            doc_metadata["id"],
-            safe_filename,
-            file_content.decode("utf-8", errors="replace"),
-        )
+        # Store file content in memory ONLY for text files (avoid corrupting binary files)
+        if content_type.startswith("text/"):
+            self.store.add_document(
+                doc_metadata["id"],
+                safe_filename,
+                file_content.decode("utf-8", errors="replace"),
+            )
+        # Binary files (PDF, DOCX, images, etc.) are loaded from disk on demand
 
         # Persist bytes to disk so content remains available after process restarts.
         os.makedirs(os.path.dirname(storage_path), exist_ok=True)
@@ -68,11 +72,7 @@ class DocumentManagementService:
         return None
 
     async def get_document_binary_content(self, document_id: str) -> Optional[bytes]:
-        """Get document binary content from memory or persistent storage."""
-        doc = self.store.get_document(document_id)
-        if doc:
-            return doc.content.encode("utf-8")
-
+        """Get document binary content from persistent storage (no memory corruption)."""
         metadata = await self.get_document(document_id)
         if not metadata:
             return None
@@ -80,14 +80,8 @@ class DocumentManagementService:
         storage_path = metadata.get("storage_path")
         if storage_path and os.path.exists(storage_path):
             with open(storage_path, "rb") as f:
-                content = f.read()
-            # Warm cache for downstream services expecting text store entries.
-            self.store.add_document(
-                metadata["id"],
-                metadata.get("filename", "document"),
-                content.decode("utf-8", errors="replace"),
-            )
-            return content
+                return f.read()
+        
         return None
 
     async def delete_document(self, document_id: str) -> bool:

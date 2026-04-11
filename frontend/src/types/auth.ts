@@ -26,6 +26,8 @@ export interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
+  hydrated: boolean;
+  hydrateFromStorage: () => void;
   setUser: (user: User, token: string) => void;
   logout: () => void;
 }

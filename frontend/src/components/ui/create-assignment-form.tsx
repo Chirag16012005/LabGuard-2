@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useCreateAssignment } from "@/features/teacher/api";
+import type { CreateAssignmentInput } from "@/features/teacher/api";
 import { FileInput } from "./file-input";
 import { Loader2 } from "lucide-react";
 
@@ -12,27 +13,34 @@ interface CreateAssignmentFormProps {
 export function CreateAssignmentForm({ courseId, onSuccess, onCancel }: CreateAssignmentFormProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [dueDate, setDueDate] = useState("");
   const [file, setFile] = useState<File | null>(null);
 
   const { mutate, isPending } = useCreateAssignment();
 
-  const isSubmitDisabled = !title.trim() || !description.trim() || isPending;
+  const isSubmitDisabled = !title.trim() || !description.trim() || !file || isPending;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSubmitDisabled) return;
+    if (isSubmitDisabled || !file) return;
 
-    mutate(
-      { courseId, title, description, dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() }, // Default +7 days optionally.
-      {
-        onSuccess: () => {
-          setTitle("");
-          setDescription("");
-          setFile(null);
-          onSuccess?.();
-        },
-      }
-    );
+    const payload: CreateAssignmentInput = {
+      courseId,
+      title,
+      description,
+      dueDate: dueDate || undefined,
+      file,
+    };
+
+    mutate(payload, {
+      onSuccess: () => {
+        setTitle("");
+        setDescription("");
+        setDueDate("");
+        setFile(null);
+        onSuccess?.();
+      },
+    });
   };
 
   return (
@@ -69,9 +77,24 @@ export function CreateAssignmentForm({ courseId, onSuccess, onCancel }: CreateAs
 
       <div className="space-y-1">
         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-          Upload PDF (Optional)
+          Due Date
         </label>
-        <FileInput onFileChange={(file) => setFile(file)} accept=".pdf" />
+        <input
+          type="date"
+          value={dueDate}
+          onChange={(e) => setDueDate(e.target.value)}
+          className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100 dark:focus:ring-blue-600"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+          Upload PDF <span className="text-red-500">*</span>
+        </label>
+        <FileInput onFileChange={(f) => setFile(f)} accept=".pdf" />
+        {!file && (
+          <p className="text-xs text-red-500 mt-1">A PDF file is required.</p>
+        )}
       </div>
 
       <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-200 mt-6 dark:border-slate-800">

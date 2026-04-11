@@ -11,16 +11,20 @@ import { CourseCard } from "@/components/ui/course-card";
 export default function StudentDashboardPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-
+  const [mounted, setMounted] = useState(false);
+ 
   useEffect(() => {
-    if (!user) {
-      router.replace("/login");
-      return;
+    setMounted(true);
+    if (mounted) {
+      if (!user) {
+        router.replace("/login");
+        return;
+      }
+      if (user.role !== "student") {
+        router.replace("/dashboard/teacher");
+      }
     }
-    if (user.role !== "student") {
-      router.replace("/dashboard/teacher");
-    }
-  }, [user, router]);
+  }, [user, router, mounted]);
 
   const { data: courses, isLoading, isError, error } = useStudentCourses();
   const joinMutation = useJoinClass();
@@ -52,8 +56,7 @@ export default function StudentDashboardPage() {
     }
   };
 
-  if (!user) return null;
-  if (user.role !== "student") return null;
+  if (!mounted || !user || user.role !== "student") return null;
 
   if (isLoading) {
     return (

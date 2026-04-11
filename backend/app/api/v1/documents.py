@@ -100,7 +100,7 @@ async def download_document(document_id: str) -> StreamingResponse:
     response = StreamingResponse(
         iter([content]), media_type=doc.get("content_type", "application/octet-stream")
     )
-    response.headers["Content-Disposition"] = f'attachment; filename="{doc.get("filename", "document")}"'
+    response.headers["Content-Disposition"] = f'inline; filename="{doc.get("filename", "document")}"'
     return response
 
 

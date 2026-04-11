@@ -85,15 +85,40 @@ class CandidateFinder:
     def find_candidates(
         self,
         doc_shingles: Dict[str, Iterable[str]],
+        
     ) -> List[Tuple[str, str, float]]:
         """
-        Find candidate document pairs.
+        Find candidate document pairs using MinHash + LSH.
 
-        Returns (doc_id_a, doc_id_b, approx_jaccard).
+        STAGES 3-4: MINHASH SIGNATURE GENERATION + LSH FILTERING
+
+        Algorithm:
+        1. Generate MinHash signatures for all documents
+        2. Insert signatures into LSH index
+        3. Query LSH to find similar pairs
+        4. Return document pairs with approximate Jaccard similarity
+
+        Args:
+            doc_shingles: Dict mapping document_id -> set of shingles
+
+        Returns:
+            List of (doc_id_a, doc_id_b, approx_jaccard) tuples
+            where approx_jaccard is the estimated Jaccard similarity
+            (only pairs above LSH threshold are returned)
+
+        Raises:
+            TypeError: If input format is invalid
         """
         if not isinstance(doc_shingles, dict):
             raise TypeError("doc_shingles must be a dict of id -> shingles")
 
+        if not doc_shingles:
+            logger.warning("No documents to process")
+            return []
+
+        logger.debug("Building LSH index for %d documents", len(doc_shingles))
+
+        # Initialize LSH with configured threshold
         lsh = MinHashLSH(
             threshold=self.lsh_config.threshold,
             num_perm=self.lsh_config.num_perm,
@@ -101,38 +126,65 @@ class CandidateFinder:
 
         minhashes: Dict[str, MinHash] = {}
 
+        # Generate MinHash signatures
         for doc_id, shingles in doc_shingles.items():
             shingles_list = list(shingles)
             if not shingles_list:
+                logger.debug("Document %s has no shingles; skipping", doc_id)
                 continue
 
-            mh = self._create_minhash(shingles_list)
-            minhashes[doc_id] = mh
             try:
+                mh = self._create_minhash(shingles_list)
+                minhashes[doc_id] = mh
                 lsh.insert(doc_id, mh)
-            except ValueError:
-                # Very unlikely but we guard against LSH internal issues
-                logger.exception("Failed to insert doc_id %s into LSH", doc_id)
+                logger.debug(
+                    "Generated MinHash for %s: %d shingles",
+                    doc_id,
+                    len(shingles_list),
+                )
+            except ValueError as e:
+                logger.exception("Failed to insert doc_id %s into LSH: %s", doc_id, e)
+                continue
 
+        logger.info("LSH index built with %d documents", len(minhashes))
+
+        # Query LSH for similar pairs
         seen: Set[Tuple[str, str]] = set()
         candidates: List[Tuple[str, str, float]] = []
 
         for doc_id, mh in minhashes.items():
             try:
                 similar_ids = lsh.query(mh)
-            except Exception:
-                logger.exception("Failed to query LSH for doc_id %s", doc_id)
+            except Exception as e:
+                logger.exception("Failed to query LSH for doc_id %s: %s", doc_id, e)
                 continue
 
             for other in similar_ids:
                 if other == doc_id:
                     continue
+                
+                # Avoid duplicates (always list pairs in sorted order)
                 pair = tuple(sorted((doc_id, other)))
                 if pair in seen:
                     continue
+                
                 seen.add(pair)
+                
+                # Compute Jaccard similarity of MinHash signatures
                 score = mh.jaccard(minhashes[other])
+                
+                logger.debug(
+                    "Candidate pair (%s, %s): Jaccard similarity=%.3f (threshold=%.3f)",
+                    pair[0], pair[1], score, self.lsh_config.threshold
+                )
+                
                 candidates.append((pair[0], pair[1], float(score)))
+
+        logger.info(
+            "Found %d candidate pairs via LSH (threshold=%.2f)",
+            len(candidates),
+            self.lsh_config.threshold,
+        )
 
         return candidates
 

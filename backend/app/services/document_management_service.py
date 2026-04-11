@@ -1,11 +1,22 @@
 from __future__ import annotations
 
+import logging
 import os
 from uuid import uuid4
 from typing import Optional
 
 from ..repositories.document_repository import DocumentRepository
 from ..services.document_service import Document, InMemoryDocumentStore
+from ..storage.docx_parser import (
+    DocumentParser,
+    FileParseError,
+    UnsupportedFileTypeError,
+    CorruptedFileError,
+    EmptyFileError,
+    get_parser,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class DocumentManagementService:
@@ -26,10 +37,49 @@ class DocumentManagementService:
         file_content: bytes,
         owner_id: Optional[str] = None,
     ) -> dict:
-        """Upload and store a document."""
+        """Upload and store a document.
+
+        Supports: PDF, DOCX, DOC, TXT
+
+        Args:
+            filename: Original filename with extension
+            content_type: MIME type of the file
+            file_content: Raw file bytes
+            owner_id: Optional ID of the document owner
+
+        Returns:
+            Document metadata dict with id, filename, content_type, size_bytes, storage_path
+
+        Raises:
+            ValueError: If file cannot be parsed or is unsupported
+        """
+        if not file_content:
+            raise ValueError("File content is empty")
+
         size_bytes = len(file_content)
         safe_filename = os.path.basename(filename)
         storage_path = os.path.join(".storage", "documents", f"{uuid4()}_{safe_filename}")
+
+        # Parse document content using production-grade parser
+        try:
+            parser = get_parser()
+            extracted_text = parser.parse(file_content, safe_filename)
+            logger.info("Successfully parsed document %s", safe_filename)
+        except UnsupportedFileTypeError as e:
+            logger.error("Unsupported file type: %s", e)
+            raise ValueError(f"Unsupported file type: {str(e)}") from e
+        except CorruptedFileError as e:
+            logger.error("File appears to be corrupted: %s", e)
+            raise ValueError(f"File is corrupted or invalid: {str(e)}") from e
+        except EmptyFileError as e:
+            logger.error("File contains no readable content: %s", e)
+            raise ValueError(f"File contains no readable content: {str(e)}") from e
+        except FileParseError as e:
+            logger.error("Error parsing file: %s", e)
+            raise ValueError(f"Error reading file: {str(e)}") from e
+        except Exception as e:
+            logger.error("Unexpected error parsing document %s: %s", safe_filename, e)
+            raise ValueError(f"Unexpected error processing file: {str(e)}") from e
 
         # Save metadata to database
         doc_metadata = await self.doc_repo.create_document(
@@ -40,17 +90,31 @@ class DocumentManagementService:
             storage_path=storage_path,
         )
 
-        # Store file content in memory under the same ID returned by the database.
+        # Store extracted text in memory under the document ID
         self.store.add_document(
             doc_metadata["id"],
             safe_filename,
-            file_content.decode("utf-8", errors="replace"),
+            extracted_text,
         )
 
-        # Persist bytes to disk so content remains available after process restarts.
+        # Persist file bytes to disk for recovery and audit trail
         os.makedirs(os.path.dirname(storage_path), exist_ok=True)
-        with open(storage_path, "wb") as f:
-            f.write(file_content)
+        try:
+            with open(storage_path, "wb") as f:
+                f.write(file_content)
+            logger.debug("Saved document file to disk: %s", storage_path)
+        except Exception as e:
+            logger.warning("Failed to persist document to disk %s: %s", storage_path, e)
+            # Don't fail the upload if persistence fails; document is in memory
+            # Database record is created, so it's still retrievable
+
+        logger.info(
+            "Document uploaded: %s (id=%s, size=%d bytes, parsed_text=%d chars)",
+            safe_filename,
+            doc_metadata["id"],
+            size_bytes,
+            len(extracted_text),
+        )
 
         return doc_metadata
 

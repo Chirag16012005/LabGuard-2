@@ -57,41 +57,93 @@ async def upload_document(
 
 
 @router.get("/{document_id}", status_code=status.HTTP_200_OK)
-async def get_document(document_id: str) -> dict:
+async def get_document(
+    document_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+) -> dict:
     if doc_service is None:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail="Document management service is not available",
         )
+    try:
+        payload_segment = credentials.credentials.split(".")[1]
+        payload_segment += "=" * (-len(payload_segment) % 4)
+        token_payload = json.loads(base64.urlsafe_b64decode(payload_segment).decode("utf-8"))
+    except (IndexError, ValueError, json.JSONDecodeError):
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    owner_id = token_payload.get("user_id") or token_payload.get("sub")
+    if not owner_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
     doc = await doc_service.get_document(document_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+    if doc.get("owner_id") != owner_id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this document")
     return {"message": "Document retrieved", "data": doc}
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_200_OK)
-async def delete_document(document_id: str) -> dict:
+async def delete_document(
+    document_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+) -> dict:
     if doc_service is None:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail="Document management service is not available",
         )
+    try:
+        payload_segment = credentials.credentials.split(".")[1]
+        payload_segment += "=" * (-len(payload_segment) % 4)
+        token_payload = json.loads(base64.urlsafe_b64decode(payload_segment).decode("utf-8"))
+    except (IndexError, ValueError, json.JSONDecodeError):
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    owner_id = token_payload.get("user_id") or token_payload.get("sub")
+    if not owner_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    doc = await doc_service.get_document(document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if doc.get("owner_id") != owner_id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this document")
+    
     success = await doc_service.delete_document(document_id)
     if not success:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise HTTPException(status_code=500, detail="Failed to delete document")
     return {"message": "Document deleted", "data": {"document_id": document_id}}
 
 
 @router.get("/{document_id}/download", status_code=status.HTTP_200_OK)
-async def download_document(document_id: str) -> StreamingResponse:
+async def download_document(
+    document_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+) -> StreamingResponse:
     if doc_service is None:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail="Document management service is not available",
         )
+    try:
+        payload_segment = credentials.credentials.split(".")[1]
+        payload_segment += "=" * (-len(payload_segment) % 4)
+        token_payload = json.loads(base64.urlsafe_b64decode(payload_segment).decode("utf-8"))
+    except (IndexError, ValueError, json.JSONDecodeError):
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    owner_id = token_payload.get("user_id") or token_payload.get("sub")
+    if not owner_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
     doc = await doc_service.get_document(document_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+    if doc.get("owner_id") != owner_id:
+        raise HTTPException(status_code=403, detail="Not authorized to download this document")
 
     content = await doc_service.get_document_binary_content(document_id)
     if not content:

@@ -41,6 +41,7 @@ class ReportRepository:
             "average_similarity": average_similarity,
             "max_similarity": max_similarity,
             "generated_at": datetime.utcnow(),
+            "is_published": False,
         }
 
         result = await collection.insert_one(report_data)
@@ -102,3 +103,29 @@ class ReportRepository:
         if report:
             return self._serialize_report(report)
         return report
+
+    async def publish_latest_report(self, assignment_id: str) -> Optional[dict]:
+        """Publish latest report for an assignment and return updated document."""
+        db = get_database()
+        collection = db[self.collection_name]
+
+        latest = await collection.find_one(
+            {"assignment_id": assignment_id}, sort=[("generated_at", -1)]
+        )
+        if not latest:
+            return None
+
+        await collection.update_one(
+            {"_id": latest["_id"]},
+            {
+                "$set": {
+                    "is_published": True,
+                    "published_at": datetime.utcnow(),
+                }
+            },
+        )
+
+        updated = await collection.find_one({"_id": latest["_id"]})
+        if updated:
+            return self._serialize_report(updated)
+        return None

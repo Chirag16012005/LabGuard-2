@@ -29,7 +29,9 @@ class DocumentManagementService:
         """Upload and store a document."""
         size_bytes = len(file_content)
         safe_filename = os.path.basename(filename)
-        storage_path = os.path.join(".storage", "documents", f"{uuid4()}_{safe_filename}")
+        storage_path = os.path.join(
+            ".storage", "documents", f"{uuid4()}_{safe_filename}"
+        )
 
         # Save metadata to database
         doc_metadata = await self.doc_repo.create_document(
@@ -103,4 +105,3 @@ class DocumentManagementService:
     async def list_user_documents(self, owner_id: str) -> list[dict]:
         """List all documents uploaded by a user."""
         return await self.doc_repo.list_user_documents(owner_id)
-

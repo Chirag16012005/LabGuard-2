@@ -51,11 +51,8 @@ async def register(payload: RegisterRequest) -> dict:
         return {
             "message": "User registered successfully",
             "data": {
-<<<<<<< HEAD
-=======
                 "user_id": user["id"],
                 "email": user["email"],
->>>>>>> upstream/main
                 "user": {
                     "id": user["id"],
                     "email": user["email"],
@@ -71,7 +68,6 @@ async def register(payload: RegisterRequest) -> dict:
     except Exception as e:
         raise HTTPException(status_code=500, detail="Registration failed")
 
-
 @router.post("/login", status_code=status.HTTP_200_OK)
 async def login(payload: LoginRequest) -> dict:
     user = await auth_service.login_user(email=payload.email, password=payload.password)
@@ -85,11 +81,6 @@ async def login(payload: LoginRequest) -> dict:
     return {
         "message": "Login successful",
         "data": {
-<<<<<<< HEAD
-=======
-            "user_id": user["id"],
-            "email": user["email"],
->>>>>>> upstream/main
             "user": {
                 "id": user["id"],
                 "email": user["email"],
@@ -100,7 +91,6 @@ async def login(payload: LoginRequest) -> dict:
             "token_type": "bearer",
         },
     }
-
 
 @router.get("/me", status_code=status.HTTP_200_OK)
 async def me(

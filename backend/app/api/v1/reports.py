@@ -19,6 +19,14 @@ auth_service = AuthService()
 bearer_scheme = HTTPBearer()
 
 
+def _require_auth_credentials(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> HTTPAuthorizationCredentials:
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return credentials
+
+
 def _decode_token_payload(credentials: HTTPAuthorizationCredentials) -> dict:
     try:
         payload_segment = credentials.credentials.split(".")[1]
@@ -47,14 +55,31 @@ async def _get_requester_context(
 
 
 @router.get("/reports/student/{student_report_id}", status_code=status.HTTP_200_OK)
-async def get_student_report_by_id(student_report_id: str) -> dict:
+async def get_student_report_by_id(
+    student_report_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(_require_auth_credentials),
+) -> dict:
     """Get individual student report using only student_report_id."""
-    entry = await report_service.get_student_report_entry_by_id(student_report_id)
-    if not entry:
-        raise HTTPException(
-            status_code=404,
-            detail="Student report entry not found or report is not published",
+    requester_id, role = await _get_requester_context(credentials)
+    include_unpublished = role in {"teacher", "admin"}
+    entry = await report_service.get_student_report_entry_by_id(
+        student_report_id,
+        include_unpublished=include_unpublished,
+    )
+
+    # Backward-compatible fallback: students may pass report_id instead of student_report_id.
+    if not entry and role == "student":
+        entry = await report_service.get_student_report_entry_for_student(
+            report_id=student_report_id,
+            student_id=requester_id,
+            include_unpublished=include_unpublished,
         )
+
+    if not entry:
+        detail = "Student report entry not found"
+        if not include_unpublished:
+            detail = "Student report entry not found or report is not published"
+        raise HTTPException(status_code=404, detail=detail)
     return {"message": "Student report entry retrieved", "data": entry}
 
 
@@ -111,8 +136,4 @@ async def get_report_matches(report_id: str) -> dict:
     result = await report_service.get_report_matches(report_id)
     if not result:
         raise HTTPException(status_code=404, detail="Report not found")
-<<<<<<< HEAD
     return {"message": "Matches retrieved", "data": result}
-=======
-    return {"message": "Matches retrieved", "data": result}
->>>>>>> upstream/main

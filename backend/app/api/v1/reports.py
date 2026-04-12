@@ -111,4 +111,8 @@ async def get_report_matches(report_id: str) -> dict:
     result = await report_service.get_report_matches(report_id)
     if not result:
         raise HTTPException(status_code=404, detail="Report not found")
+<<<<<<< HEAD
     return {"message": "Matches retrieved", "data": result}
+=======
+    return {"message": "Matches retrieved", "data": result}
+>>>>>>> upstream/main

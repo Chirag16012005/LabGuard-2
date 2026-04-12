@@ -1,17 +1,35 @@
 "use client";
 
-import { useState } from "react";
-import { useCourses, useCreateCourse, CreateCoursePayload } from "@/features/teacher/api";
+import { useEffect, useMemo, useState } from "react";
+import {
+  useCourses,
+  useCreateCourse,
+  CreateCoursePayload,
+  fetchCourseById,
+} from "@/features/teacher/api";
 import { CourseCard } from "@/components/ui/course-card";
 import { Loader2, Plus, X, Copy, Check } from "lucide-react";
 
-export default function CoursesPage() {
+const JOIN_CODE_STORAGE_KEY = "teacher-course-join-codes";
+
+export default function CoursesPage() 
+{
   const { data: courses, isLoading, isError } = useCourses();
   const createCourseMutation = useCreateCourse();
 
   const [showForm, setShowForm] = useState(false);
-  const [createdJoinCode, setCreatedJoinCode] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [joinCodeByCourseId, setJoinCodeByCourseId] = useState<Record<string, string>>(() => {
+    if (typeof window === "undefined") return {};
+    const raw = window.localStorage.getItem(JOIN_CODE_STORAGE_KEY);
+    if (!raw) return {};
+    try {
+      return JSON.parse(raw) as Record<string, string>;
+    } catch {
+      window.localStorage.removeItem(JOIN_CODE_STORAGE_KEY);
+      return {};
+    }
+  });
+  const [copiedCourseId, setCopiedCourseId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<CreateCoursePayload>({
     name: "",
@@ -22,9 +40,65 @@ export default function CoursesPage() {
 
   const [formError, setFormError] = useState<string | null>(null);
 
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
+  const resolvedJoinCodeByCourseId = useMemo(() => {
+    const merged = { ...joinCodeByCourseId };
+    for (const course of courses ?? []) {
+      if (course.joinCode && !merged[course.id]) {
+        merged[course.id] = course.joinCode;
+      }
+    }
+    return merged;
+  }, [joinCodeByCourseId, courses]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(JOIN_CODE_STORAGE_KEY, JSON.stringify(resolvedJoinCodeByCourseId));
+  }, [resolvedJoinCodeByCourseId]);
+
+  useEffect(() => {
+    if (!courses || courses.length === 0) return;
+
+    const missingCourseIds = courses
+      .filter((course) => !resolvedJoinCodeByCourseId[course.id])
+      .map((course) => course.id);
+
+    if (missingCourseIds.length === 0) return;
+
+    let cancelled = false;
+
+    const loadMissingJoinCodes = async () => {
+      const results = await Promise.all(
+        missingCourseIds.map(async (courseId) => ({
+          courseId,
+          detail: await fetchCourseById(courseId),
+        }))
+      );
+
+      if (cancelled) return;
+
+      setJoinCodeByCourseId((prev) => {
+        let changed = false;
+        const next = { ...prev };
+
+        for (const result of results) {
+          if (result.detail?.joinCode && next[result.courseId] !== result.detail.joinCode) {
+            next[result.courseId] = result.detail.joinCode;
+            changed = true;
+          }
+        }
+
+        return changed ? next : prev;
+      });
+    };
+
+    loadMissingJoinCodes();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [courses, resolvedJoinCodeByCourseId]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
     setFormError(null);
   };
@@ -48,7 +122,12 @@ export default function CoursesPage() {
 
     try {
       const result = await createCourseMutation.mutateAsync(formData);
-      setCreatedJoinCode(result.joinCode);
+      setJoinCodeByCourseId((prev) => ({
+        ...prev,
+        [result.classId]: result.joinCode,
+      }));
+      setCopiedCourseId(null);
+      setShowForm(false);
       setFormData({ name: "", class_code: "", description: "", section: "" });
     } catch (err) {
       setFormError(
@@ -57,16 +136,12 @@ export default function CoursesPage() {
     }
   };
 
-  const handleCopyCode = async () => {
-    if (!createdJoinCode) return;
-    await navigator.clipboard.writeText(createdJoinCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleCloseSuccess = () => {
-    setCreatedJoinCode(null);
-    setShowForm(false);
+  const handleCopyCode = async (courseId: string) => {
+    const joinCode = resolvedJoinCodeByCourseId[courseId];
+    if (!joinCode) return;
+    await navigator.clipboard.writeText(joinCode);
+    setCopiedCourseId(courseId);
+    setTimeout(() => setCopiedCourseId((current) => (current === courseId ? null : current)), 2000);
   };
 
   if (isLoading) {
@@ -97,62 +172,74 @@ export default function CoursesPage() {
             Manage your classroom and track student progress.
           </p>
         </div>
-        {!showForm && !createdJoinCode && (
-          <button
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-900 border border-slate-900 rounded-lg hover:translate-y-[-1px] transition-all duration-200 dark:bg-slate-100 dark:text-slate-900 dark:border-slate-100"
-          >
-            <Plus className="h-4 w-4" />
-            Create Course
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {!showForm && (
+            <button
+              onClick={() => setShowForm(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-900 border border-slate-900 rounded-lg hover:translate-y-[-1px] transition-all duration-200 dark:bg-slate-100 dark:text-slate-900 dark:border-slate-100"
+            >
+              <Plus className="h-4 w-4" />
+              Create Course
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Success — show join code */}
-      {createdJoinCode && (
-        <div className="border border-green-200 bg-green-50 rounded-xl p-6 dark:bg-green-900/20 dark:border-green-800/50">
-          <div className="flex items-start justify-between">
-            <div className="space-y-3">
-              <h3 className="text-lg font-semibold text-green-800 dark:text-green-300">
-                Course created successfully!
-              </h3>
-              <p className="text-sm text-green-700 dark:text-green-400">
-                Share this join code with your students so they can enroll:
-              </p>
-              <div className="flex items-center gap-3">
-                <code className="px-4 py-2.5 bg-white border border-green-300 rounded-lg text-lg font-mono font-bold tracking-widest text-green-800 dark:bg-slate-800 dark:border-green-700 dark:text-green-300">
-                  {createdJoinCode}
-                </code>
-                <button
-                  onClick={handleCopyCode}
-                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-green-700 bg-green-100 rounded-lg hover:bg-green-200 transition-colors dark:text-green-300 dark:bg-green-800/40 dark:hover:bg-green-800/60"
+      {/* Top-right panel: persistent join codes for every course */}
+      {courses && courses.length > 0 && (
+        <div className="border border-slate-200 rounded-xl p-4 bg-white dark:bg-slate-900 dark:border-slate-800">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              Class Join Codes
+            </h3>
+            <span className="text-xs text-slate-400">Top-right panel</span>
+          </div>
+
+          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+            {courses.map((course) => {
+              const code = resolvedJoinCodeByCourseId[course.id] || "Not available";
+              const isReady = code !== "Not available";
+
+              return (
+                <div
+                  key={course.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/40"
                 >
-                  {copied ? (
-                    <>
-                      <Check className="h-4 w-4" />
-                      Copied!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-4 w-4" />
-                      Copy
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-            <button
-              onClick={handleCloseSuccess}
-              className="p-1.5 rounded-lg text-green-600 hover:bg-green-100 transition-colors dark:text-green-400 dark:hover:bg-green-800/40"
-            >
-              <X className="h-5 w-5" />
-            </button>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-800 truncate dark:text-slate-200">
+                      {course.title}
+                    </p>
+                    <p className="font-mono text-xs tracking-wider text-slate-600 dark:text-slate-400">
+                      {code}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyCode(course.id)}
+                    disabled={!isReady}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    {copiedCourseId === course.id ? (
+                      <>
+                        <Check className="h-3.5 w-3.5" />
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3.5 w-3.5" />
+                        Copy
+                      </>
+                    )}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
       {/* Create course form */}
-      {showForm && !createdJoinCode && (
+      {showForm && (
         <form
           onSubmit={handleSubmit}
           className="border border-slate-200 rounded-xl p-6 bg-white space-y-5 dark:bg-slate-900 dark:border-slate-800"

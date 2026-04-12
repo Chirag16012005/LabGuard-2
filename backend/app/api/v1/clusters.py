@@ -1,15 +1,27 @@
 from __future__ import annotations
 
+<<<<<<< HEAD
+from fastapi import APIRouter, status
+=======
 import base64
 import json
 
 from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+>>>>>>> upstream/main
 
 from ...services.cluster_service import ClusteringService
 
 router = APIRouter()
 clustering_service = ClusteringService()
+<<<<<<< HEAD
+
+
+@router.get("/assignments/{assignment_id}/clusters", status_code=status.HTTP_200_OK)
+async def get_assignment_clusters(assignment_id: str) -> dict:
+    result = await clustering_service.get_assignment_clusters(assignment_id)
+    return {"message": "Clusters retrieved", "data": result}
+=======
 bearer_scheme = HTTPBearer()
 
 
@@ -36,3 +48,4 @@ async def get_assignment_clusters(
         return {"message": "Clusters retrieved", "data": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to retrieve clusters")
+>>>>>>> upstream/main

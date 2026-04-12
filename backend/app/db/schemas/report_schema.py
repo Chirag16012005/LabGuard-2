@@ -11,6 +11,7 @@ class ReportSummary(APIModel):
     id: str
     assignment_id: str
     generated_at: datetime
+    is_published: bool = False
     average_similarity: float = Field(ge=0.0, le=100.0)
     max_similarity: float = Field(ge=0.0, le=100.0)
 

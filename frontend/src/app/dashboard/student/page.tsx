@@ -52,8 +52,7 @@ export default function StudentDashboardPage() {
     }
   };
 
-  if (!user) return null;
-  if (user.role !== "student") return null;
+  if (!mounted || !user || user.role !== "student") return null;
 
   if (isLoading) {
     return (

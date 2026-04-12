@@ -20,7 +20,7 @@ class InMemoryDocumentStore:
     """Minimal production-ready in-memory document store."""
 
     MAX_DOCUMENTS = 10_000
-    MAX_CONTENT_LENGTH = 500_000
+    MAX_CONTENT_LENGTH = 50_000_000  # 50MB limit for documents
 
     def __init__(self) -> None:
         self._docs: Dict[str, Document] = {}

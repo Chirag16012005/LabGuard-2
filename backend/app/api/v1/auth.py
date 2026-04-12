@@ -51,8 +51,11 @@ async def register(payload: RegisterRequest) -> dict:
         return {
             "message": "User registered successfully",
             "data": {
+<<<<<<< HEAD
+=======
                 "user_id": user["id"],
                 "email": user["email"],
+>>>>>>> upstream/main
                 "user": {
                     "id": user["id"],
                     "email": user["email"],
@@ -82,8 +85,11 @@ async def login(payload: LoginRequest) -> dict:
     return {
         "message": "Login successful",
         "data": {
+<<<<<<< HEAD
+=======
             "user_id": user["id"],
             "email": user["email"],
+>>>>>>> upstream/main
             "user": {
                 "id": user["id"],
                 "email": user["email"],

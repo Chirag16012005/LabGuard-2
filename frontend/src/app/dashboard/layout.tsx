@@ -1,35 +1,81 @@
 "use client";
 
 import { useAuthStore } from "@/store/authStore";
-import { LogOut, LayoutDashboard, FileText, BookOpen } from "lucide-react";
+import { LogOut, LayoutDashboard, FileText,BookOpen } from "lucide-react";
 import Link from "next/link";
-import { useRouter, usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, usePathname, useParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { twMerge } from "tailwind-merge";
 import { logoutApi } from "@/lib/api-client";
+import { useQuery } from "@tanstack/react-query";
+import { apiClient } from "@/lib/api-client";
+
+type ApiEnvelope<T> = {
+  message?: string;
+  data: T;
+};
+
+type BackendClassHeader = {
+  class_id: string;
+  name: string;
+  class_code?: string | null;
+};
 
 function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user, logout } = useAuthStore();
+  const { user, logout, hydrated, hydrateFromStorage } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
+  const params = useParams<{ courseId?: string | string[] }>();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    // setMounted(true);
-    if (!user) {
-      router.push("/login");
+  const courseId = useMemo(() => {
+    const raw = params?.courseId;
+    if (typeof raw === "string") return raw;
+    return undefined;
+  }, [params]);
+
+  const courseHeaderQuery = useQuery({
+    queryKey: ["dashboard-course-header", courseId],
+    enabled: Boolean(courseId),
+    staleTime: 30_000,
+    queryFn: async () => {
+      const res = await apiClient.get<ApiEnvelope<BackendClassHeader>>(
+        `/classes/${courseId}`
+      );
+      return res.data.data;
+    },
+  });
+
+  const pageTitle = useMemo(() => {
+    if (courseId) {
+      const classCode = courseHeaderQuery.data?.class_code?.trim();
+      const className = courseHeaderQuery.data?.name?.trim();
+      return classCode || className || "Course";
     }
-  }, [user, router]);
 
-  if (!user) return null;
+    const last = pathname.split("/").pop();
+    if (!last || last === "dashboard") 
+      return "Dashboard";
+    return last.replace("-", " ");
+  }, [courseHeaderQuery.data?.class_code, courseHeaderQuery.data?.name, courseId, pathname]);
 
-  const handleLogout = async () => {
+  useEffect(() => {
+    hydrateFromStorage();
+  }, [hydrateFromStorage]);
+
+  useEffect(() => {
+    if (hydrated && !user) {
+      router.replace("/login");
+    }
+  }, [hydrated, user, router]);
+
+  const handleLogout = useCallback(async () => {
     try {
       await logoutApi();
     } catch {
@@ -37,7 +83,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
     logout();
     router.push("/login");
-  };
+  }, [logout, router]);
+
+  if (!hydrated) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-sky-500 border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!user) return null;
 
   const navItems =
     user.role === "teacher"
@@ -121,7 +177,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <LayoutDashboard className="h-5 w-5" />
             </button>
             <h1 className="text-xl font-semibold tracking-tight text-slate-800 capitalize dark:text-slate-100">
-              {pathname.split('/').pop() === 'dashboard' ? 'Dashboard' : pathname.split('/').pop()?.replace('-', ' ')}
+              {pageTitle}
             </h1>
           </div>
         </header>

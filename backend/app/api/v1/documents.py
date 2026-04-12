@@ -57,15 +57,21 @@ async def upload_document(
 
 
 @router.get("/{document_id}", status_code=status.HTTP_200_OK)
+<<<<<<< HEAD
+async def get_document(document_id: str) -> dict:
+=======
 async def get_document(
     document_id: str,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ) -> dict:
+>>>>>>> upstream/main
     if doc_service is None:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail="Document management service is not available",
         )
+<<<<<<< HEAD
+=======
     try:
         payload_segment = credentials.credentials.split(".")[1]
         payload_segment += "=" * (-len(payload_segment) % 4)
@@ -77,6 +83,7 @@ async def get_document(
     if not owner_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+>>>>>>> upstream/main
     doc = await doc_service.get_document(document_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -86,15 +93,21 @@ async def get_document(
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_200_OK)
+<<<<<<< HEAD
+async def delete_document(document_id: str) -> dict:
+=======
 async def delete_document(
     document_id: str,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ) -> dict:
+>>>>>>> upstream/main
     if doc_service is None:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail="Document management service is not available",
         )
+<<<<<<< HEAD
+=======
     try:
         payload_segment = credentials.credentials.split(".")[1]
         payload_segment += "=" * (-len(payload_segment) % 4)
@@ -112,6 +125,7 @@ async def delete_document(
     if doc.get("owner_id") != owner_id:
         raise HTTPException(status_code=403, detail="Not authorized to delete this document")
     
+>>>>>>> upstream/main
     success = await doc_service.delete_document(document_id)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to delete document")
@@ -119,15 +133,21 @@ async def delete_document(
 
 
 @router.get("/{document_id}/download", status_code=status.HTTP_200_OK)
+<<<<<<< HEAD
+async def download_document(document_id: str) -> StreamingResponse:
+=======
 async def download_document(
     document_id: str,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ) -> StreamingResponse:
+>>>>>>> upstream/main
     if doc_service is None:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail="Document management service is not available",
         )
+<<<<<<< HEAD
+=======
     try:
         payload_segment = credentials.credentials.split(".")[1]
         payload_segment += "=" * (-len(payload_segment) % 4)
@@ -139,6 +159,7 @@ async def download_document(
     if not owner_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+>>>>>>> upstream/main
     doc = await doc_service.get_document(document_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -152,7 +173,7 @@ async def download_document(
     response = StreamingResponse(
         iter([content]), media_type=doc.get("content_type", "application/octet-stream")
     )
-    response.headers["Content-Disposition"] = f'attachment; filename="{doc.get("filename", "document")}"'
+    response.headers["Content-Disposition"] = f'inline; filename="{doc.get("filename", "document")}"'
     return response
 
 

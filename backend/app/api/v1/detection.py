@@ -18,7 +18,10 @@ if DetectionOrchestrationService is not None:
     detection_service = DetectionOrchestrationService()
 else:
     detection_service = None
+<<<<<<< HEAD
+=======
 bearer_scheme = HTTPBearer()
+>>>>>>> upstream/main
 
 
 class DetectionRunRequest(BaseModel):
@@ -31,6 +34,8 @@ async def run_detection(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ) -> dict:
     try:
+<<<<<<< HEAD
+=======
         payload_segment = credentials.credentials.split(".")[1]
         payload_segment += "=" * (-len(payload_segment) % 4)
         token_payload = json.loads(base64.urlsafe_b64decode(payload_segment).decode("utf-8"))
@@ -41,6 +46,7 @@ async def run_detection(
         raise HTTPException(status_code=401, detail="Invalid token")
 
     try:
+>>>>>>> upstream/main
         if detection_service is None:
             raise HTTPException(
                 status_code=status.HTTP_501_NOT_IMPLEMENTED,
@@ -53,6 +59,9 @@ async def run_detection(
 
 
 @router.get("/jobs/{job_id}", status_code=status.HTTP_200_OK)
+<<<<<<< HEAD
+async def get_detection_job(job_id: str) -> dict:
+=======
 async def get_detection_job(
     job_id: str,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
@@ -67,6 +76,7 @@ async def get_detection_job(
     if not token_payload.get("user_id") and not token_payload.get("sub"):
         raise HTTPException(status_code=401, detail="Invalid token")
 
+>>>>>>> upstream/main
     try:
         result = await detection_service.get_detection_job_status(job_id)
         if not result:

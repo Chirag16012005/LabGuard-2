@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect} from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, BookOpen, ClipboardCheck, Loader2, Users } from "lucide-react";
@@ -12,23 +12,28 @@ import { CourseCard } from "@/components/ui/course-card";
 export default function TeacherDashboardPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-
+  // const [mounted, setMounted] = useState(false);
+ 
   useEffect(() => {
-    if (!user) {
-      router.replace("/login");
-      return;
-    }
-    if (user.role !== "teacher") {
-      router.replace("/dashboard/student");
-    }
+    // setMounted(true);
+    // if (mounted) {
+      if (!user) {
+        router.replace("/login");
+        return;
+      }
+      if (user.role !== "teacher") {
+        router.replace("/dashboard/student");
+      }
+    // }
   }, [user, router]);
-
+ 
   const { data: courses, isLoading } = useCourses();
+ 
+  if (!user || user.role !== "teacher") 
+    return null;
 
-  if (!user) return null;
-  if (user.role !== "teacher") return null;
-
-  if (isLoading) {
+  if (isLoading) 
+  {
     return (
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
@@ -38,7 +43,7 @@ export default function TeacherDashboardPage() {
 
   const teacherStats = [
     { label: "Active Courses", value: courses?.length || 0, icon: BookOpen, color: "text-blue-500" },
-    { label: "Students Enrolled", value: 128, icon: Users, color: "text-green-500" },
+    { label: "Students Enrolled", value: 0, icon: Users, color: "text-green-500" },
     { label: "Pending Submissions", value: 42, icon: ClipboardCheck, color: "text-amber-500" },
   ];
 

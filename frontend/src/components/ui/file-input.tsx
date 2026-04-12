@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import { UploadCloud, File, X } from "lucide-react";
-import clsx from "clsx";
+// import clsx from "clsx";
 
 interface FileInputProps {
   onFileChange: (file: File | null) => void;

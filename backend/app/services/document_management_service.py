@@ -167,4 +167,3 @@ class DocumentManagementService:
     async def list_user_documents(self, owner_id: str) -> list[dict]:
         """List all documents uploaded by a user."""
         return await self.doc_repo.list_user_documents(owner_id)
-

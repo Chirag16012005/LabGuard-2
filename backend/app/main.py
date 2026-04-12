@@ -57,7 +57,7 @@ async def startup_event() -> None:
     logger.info("MongoDB connection established")
     await ensure_indexes()
     logger.info("Database indexes ensured")
-    logger.info("Application startup complete ✓")
+    logger.info("Application startup complete")
 
 
 @app.on_event("shutdown")

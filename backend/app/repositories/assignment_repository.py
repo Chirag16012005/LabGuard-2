@@ -23,17 +23,6 @@ class AssignmentRepository:
         )
         serialized.pop("_id", None)
         serialized.pop("id", None)
-
-        # Ensure required Pydantic schema fields always exist with safe defaults
-        if not serialized.get("status"):
-            serialized["status"] = "published"
-        if serialized.get("submission_count") is None:
-            serialized["submission_count"] = len(serialized.get("submissions", []))
-        if not serialized.get("content_type"):
-            serialized["content_type"] = "application/octet-stream"
-        if serialized.get("size_bytes") is None:
-            serialized["size_bytes"] = 0
-
         return serialized
 
     async def create_assignment(
@@ -58,12 +47,10 @@ class AssignmentRepository:
             "description": description,
             "due_date": due_date,
             "filename": filename,
-            "content_type": content_type or "application/octet-stream",
-            "size_bytes": size_bytes or 0,
+            "content_type": content_type,
+            "size_bytes": size_bytes,
             "assignment_file_document_id": assignment_file_document_id,
             "storage_path": storage_path,
-            "status": "published",
-            "submission_count": 0,
             "submissions": [],
             "created_at": datetime.utcnow(),
             "updated_at": datetime.utcnow(),

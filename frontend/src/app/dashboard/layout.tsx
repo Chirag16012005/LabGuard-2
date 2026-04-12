@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuthStore } from "@/store/authStore";
-import { LogOut, LayoutDashboard, FileText, BookOpen } from "lucide-react";
+import { LogOut, LayoutDashboard, FileText,BookOpen } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname, useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -32,6 +32,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const params = useParams<{ courseId?: string | string[] }>();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // const [mounted, setMounted] = useState(false);
 
   const courseId = useMemo(() => {
     const raw = params?.courseId;

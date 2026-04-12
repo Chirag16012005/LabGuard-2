@@ -107,7 +107,6 @@ export default function AssignmentSubmissionsPage() {
           ))}
         </div>
       )}
-
     </div>
   );
 }

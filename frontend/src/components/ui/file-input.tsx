@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import { UploadCloud, File, X } from "lucide-react";
-import clsx from "clsx";
+// import clsx from "clsx";
 
 interface FileInputProps {
   onFileChange: (file: File | null) => void;
@@ -14,7 +14,6 @@ export function FileInput({ onFileChange, accept = ".pdf", id = "file-upload" }:
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
-    console.log('Document upload - File selected:', file?.name, 'Size:', file?.size, 'Type:', file?.type);
     setSelectedFile(file);
     onFileChange(file);
   };

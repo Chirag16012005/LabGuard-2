@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from ..repositories.submission_repository import SubmissionRepository
 from ..services.document_service import Document
 from ..services.document_management_service import DocumentManagementService
 from ..services.detection_service import PlagiarismDetector, PlagiarismConfig
 from ..repositories.report_repository import ReportRepository
 from ..repositories.detection_repository import DetectionRepository
+
+logger = logging.getLogger(__name__)
 
 
 class DetectionOrchestrationService:
@@ -19,51 +22,132 @@ class DetectionOrchestrationService:
         self.detector = PlagiarismDetector(PlagiarismConfig())
 
     async def run_detection(self, assignment_id: str) -> dict:
-        """Run plagiarism detection on all submissions for an assignment."""
-        # Create detection job
+        """Run plagiarism detection on all submissions for an assignment.
+        
+        Orchestrates the full pipeline:
+        1. Fetch all submissions for the assignment
+        2. Load document content
+        3. Run PlagiarismDetector
+        4. Save results to database
+        5. Update job status
+        
+        Args:
+            assignment_id: ID of the assignment to analyze
+        
+        Returns:
+            Dict with job_id, report_id, status, and message
+        
+        Raises:
+            Exception: If detection fails. Job status will be marked "failed".
+        """
+        logger.info("Starting detection for assignment %s", assignment_id)
+        
+        # Create detection job to track progress
         job = await self.detection_repo.create_detection_job(assignment_id, "processing")
+        logger.debug("Created detection job %s", job.get("id"))
 
         try:
-            # Get all submissions for the assignment
+            # Fetch all submissions for this assignment
+            logger.debug("Fetching submissions for assignment %s", assignment_id)
             submissions = await self.submission_repo.list_assignment_submissions(assignment_id)
+            
+            logger.info("Found %d submissions for assignment %s", len(submissions), assignment_id)
 
             if len(submissions) < 2:
                 # Not enough submissions to compare
+                logger.warning(
+                    "Assignment %s has only %d submissions (need >= 2). Skipping detection.",
+                    assignment_id,
+                    len(submissions)
+                )
                 await self.detection_repo.update_detection_job(job["id"], "completed")
                 return {
                     "job_id": job["id"],
                     "status": "completed",
-                    "message": "Less than 2 submissions. Skipping detection.",
+                    "message": f"Insufficient submissions ({len(submissions)}). At least 2 required.",
                 }
 
             # Build Document objects from submissions
+            logger.debug("Loading document content for %d submissions", len(submissions))
             documents = []
+            failed_submissions = 0
+            
             for sub in submissions:
-                content = await self.document_service.get_document_content(
-                    sub["document_id"]
+                try:
+                    content = await self.document_service.get_document_content(sub["document_id"])
+                    
+                    if not content:
+                        logger.warning(
+                            "No content for submission %s (document %s). Skipping.",
+                            sub.get("id"), sub.get("document_id")
+                        )
+                        failed_submissions += 1
+                        continue
+                    
+                    doc = Document(
+                        id=sub["document_id"],
+                        filename=f"submission_{sub.get('student_id', 'unknown')}",
+                        content=content,
+                    )
+                    documents.append(doc)
+                    
+                except Exception as e:
+                    logger.error("Failed to load submission %s: %s", sub.get("id"), e)
+                    failed_submissions += 1
+                    continue
+
+            logger.info(
+                "Successfully loaded %d/%d submissions (%d failed)",
+                len(documents),
+                len(submissions),
+                failed_submissions,
+            )
+
+            if len(documents) < 2:
+                logger.error(
+                    "Not enough valid documents for comparison (%d). Aborting.",
+                    len(documents)
                 )
-                doc = Document(
-                    id=sub["document_id"],
-                    filename=f"submission_{sub['student_id']}",
-                    content=content or "",
-                )
-                documents.append(doc)
+                await self.detection_repo.update_detection_job(job["id"], "failed")
+                return {
+                    "job_id": job["id"],
+                    "status": "failed",
+                    "message": f"Could not load sufficient documents ({len(documents)}). "
+                              f"{failed_submissions} submissions failed to load.",
+                }
 
             # Run detection pipeline
+            logger.info("Running plagiarism detection on %d documents", len(documents))
             detection_results = self.detector.detect(documents)
+            
+            if not detection_results:
+                logger.warning("Detection returned empty results")
+                detection_results = {doc.id: [doc.id, {}, 0.0] for doc in documents}
 
-            # Save report
+            logger.info("Detection completed. Generated results for %d documents", len(detection_results))
+
+            # Save report to database
+            logger.debug("Saving detection report to database")
             report = await self.report_repo.create_report(
                 assignment_id=assignment_id,
                 results=detection_results,
                 average_similarity=self._calculate_average_similarity(detection_results),
                 max_similarity=self._calculate_max_similarity(detection_results),
             )
+            
+            logger.info(
+                "Report saved: report_id=%s, avg_sim=%.2f, max_sim=%.2f",
+                report.get("id"),
+                report.get("average_similarity", 0.0),
+                report.get("max_similarity", 0.0),
+            )
 
             # Update job status
             await self.detection_repo.update_detection_job(
                 job["id"], "completed", report["id"]
             )
+            
+            logger.info("Detection job %s completed successfully", job["id"])
 
             return {
                 "job_id": job["id"],
@@ -73,6 +157,7 @@ class DetectionOrchestrationService:
             }
 
         except Exception as e:
+            logger.exception("Detection failed for assignment %s: %s", assignment_id, e)
             await self.detection_repo.update_detection_job(job["id"], "failed")
             raise e
 

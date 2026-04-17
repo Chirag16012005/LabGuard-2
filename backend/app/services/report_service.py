@@ -21,6 +21,40 @@ class ReportService:
         """Create deterministic student_report_id for a document in a report."""
         return hashlib.md5(f"{report_id}_{document_id}".encode()).hexdigest()[:16]
 
+    @staticmethod
+    def _build_student_report_entry(
+        report: dict, document_id: str, student_report_id: str
+    ) -> dict:
+        """Build one student-facing report entry from a report and document id."""
+        results = report.get("results", {})
+        document_ids = sorted(results.keys())
+        _, doc_group, plagiarism_score = results.get(
+            document_id, [document_id, {}, 0.0]
+        )
+
+        comparisons = []
+        for target_doc_id in document_ids:
+            if document_id != target_doc_id:
+                passages_list, similarity_score = doc_group.get(
+                    target_doc_id, [[], 0.0]
+                )
+                comparisons.append(
+                    {
+                        "document_id": target_doc_id,
+                        "similarity": similarity_score,
+                        "matched_passages": len(passages_list),
+                    }
+                )
+
+        return {
+            "student_report_id": student_report_id,
+            "report_id": report.get("report_id"),
+            "assignment_id": report.get("assignment_id"),
+            "document_id": document_id,
+            "plagiarism_score": plagiarism_score,
+            "comparisons": comparisons,
+        }
+
     async def list_assignment_reports(self, assignment_id: str) -> list[dict]:
         """List all reports for an assignment with formatted matrix data."""
         reports = await self.report_repo.list_assignment_reports(assignment_id)
@@ -78,13 +112,15 @@ class ReportService:
         return formatted_reports
 
     async def get_student_report_entry_by_id(
-        self, student_report_id: str
+        self,
+        student_report_id: str,
+        include_unpublished: bool = False,
     ) -> Optional[dict]:
         """Get one student report entry using only student_report_id."""
         reports = await self.report_repo.list_all_reports()
 
         for report in reports:
-            if not report.get("is_published", False):
+            if not include_unpublished and not report.get("is_published", False):
                 continue
 
             results = report.get("results", {})
@@ -96,34 +132,53 @@ class ReportService:
                 )
                 if expected_id != student_report_id:
                     continue
-
-                doc_id_ref, doc_group, plagiarism_score = results.get(
-                    document_id, [document_id, {}, 0.0]
+                return self._build_student_report_entry(
+                    report=report,
+                    document_id=document_id,
+                    student_report_id=student_report_id,
                 )
-                comparisons = []
-                for target_doc_id in document_ids:
-                    if document_id != target_doc_id:
-                        passages_list, similarity_score = doc_group.get(
-                            target_doc_id, [[], 0.0]
-                        )
-                        comparisons.append(
-                            {
-                                "document_id": target_doc_id,
-                                "similarity": similarity_score,
-                                "matched_passages": len(passages_list),
-                            }
-                        )
-
-                return {
-                    "student_report_id": student_report_id,
-                    "report_id": report.get("report_id"),
-                    "assignment_id": report.get("assignment_id"),
-                    "document_id": document_id,
-                    "plagiarism_score": plagiarism_score,
-                    "comparisons": comparisons,
-                }
 
         return None
+
+    async def get_student_report_entry_for_student(
+        self,
+        report_id: str,
+        student_id: str,
+        include_unpublished: bool = False,
+    ) -> Optional[dict]:
+        """Resolve a student's entry when caller passes report_id instead of student_report_id."""
+        report = await self.report_repo.get_report_by_id(report_id)
+        if not report:
+            return None
+
+        if not include_unpublished and not report.get("is_published", False):
+            return None
+
+        assignment_id = report.get("assignment_id")
+        if not assignment_id:
+            return None
+
+        submission = await self.submission_repo.get_student_submission(
+            assignment_id,
+            student_id,
+        )
+        if not submission:
+            return None
+
+        document_id = submission.get("document_id")
+        results = report.get("results", {})
+        if not document_id or document_id not in results:
+            return None
+
+        resolved_student_report_id = self._student_report_id(
+            report.get("report_id", ""),
+            document_id,
+        )
+        return self._build_student_report_entry(
+            report=report,
+            document_id=document_id,
+            student_report_id=resolved_student_report_id,
+        )
 
     async def publish_latest_assignment_report(
         self, assignment_id: str
@@ -166,6 +221,7 @@ class ReportService:
     async def get_report_matches(self, report_id: str) -> Optional[dict]:
         """Get all plagiarism matches from a report with full passage details."""
         report = await self.report_repo.get_report_by_id(report_id)
+
         if not report:
             return None
 

@@ -81,6 +81,15 @@ class SubmissionRepository:
             return self._serialize_submission(submission)
         return None
 
+    async def get_submission_by_document_id(self, document_id: str) -> Optional[dict]:
+        """Get submission by linked document id."""
+        db = get_database()
+        collection = db[self.collection_name]
+        submission = await collection.find_one({"document_id": document_id})
+        if submission:
+            return self._serialize_submission(submission)
+        return None
+
     async def delete_submission(self, submission_id: str) -> bool:
         """Delete submission by ID."""
         try:

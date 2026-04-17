@@ -154,40 +154,6 @@ async def delete_class(
     return {"message": "Class deleted", "data": {"class_id": class_id}}
 
 
-@router.post("/{class_id}/join", status_code=status.HTTP_200_OK)
-async def join_class(
-    class_id: str,
-    payload: JoinClassRequest,
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-) -> dict:
-    try:
-        payload_segment = credentials.credentials.split(".")[1]
-        payload_segment += "=" * (-len(payload_segment) % 4)
-        token_payload = json.loads(
-            base64.urlsafe_b64decode(payload_segment).decode("utf-8")
-        )
-    except (IndexError, ValueError, json.JSONDecodeError):
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    student_id = token_payload.get("user_id") or token_payload.get("sub")
-    if not student_id:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    try:
-        success = await class_service.join_class(
-            class_id, payload.join_code, student_id
-        )
-        if not success:
-            raise HTTPException(status_code=400, detail="Failed to join class")
-        return {"message": "Joined class successfully", "data": {"class_id": class_id}}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=500, detail="Failed to join class")
-
-
 @router.delete("/{class_id}/leave", status_code=status.HTTP_200_OK)
 async def leave_class(
     class_id: str,

@@ -84,6 +84,17 @@ class AssignmentRepository:
             assignments.append(self._serialize_assignment(doc))
         return assignments
 
+    async def get_assignment_by_document_id(self, document_id: str) -> Optional[dict]:
+        """Get assignment by linked assignment document id."""
+        db = get_database()
+        collection = db[self.collection_name]
+        assignment = await collection.find_one(
+            {"assignment_file_document_id": document_id}
+        )
+        if assignment:
+            return self._serialize_assignment(assignment)
+        return None
+
     async def delete_assignment(self, assignment_id: str) -> bool:
         """Delete assignment by ID."""
         try:

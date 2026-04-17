@@ -28,6 +28,7 @@ class DocumentRepository:
         content_type: str,
         size_bytes: int,
         owner_id: Optional[str] = None,
+        file_id: Optional[str] = None,
         storage_path: Optional[str] = None,
     ) -> dict:
         """Create a new document metadata record."""
@@ -44,6 +45,7 @@ class DocumentRepository:
             "content_type": content_type,
             "size_bytes": size_bytes,
             "owner_id": owner_id,
+            "file_id": file_id,
             "storage_path": storage_path,
             "created_at": datetime.utcnow(),
             "updated_at": datetime.utcnow(),
@@ -53,11 +55,28 @@ class DocumentRepository:
         return self._serialize_document(doc_data)
 
     async def get_document_by_id(self, document_id: str) -> Optional[dict]:
-        """Get document by ID."""
+        """Get document by ID.
+
+        Supports both Mongo _id(ObjectId) and explicit string id field for
+        compatibility with older records.
+        """
         try:
             db = get_database()
             collection = db[self.collection_name]
-            doc = await collection.find_one({"_id": ObjectId(document_id)})
+
+            normalized_id = str(document_id).strip()
+            doc = None
+
+            # Primary lookup path for current records.
+            try:
+                doc = await collection.find_one({"_id": ObjectId(normalized_id)})
+            except Exception:
+                doc = None
+
+            # Backward-compatible fallback for records keyed by explicit string id.
+            if not doc:
+                doc = await collection.find_one({"id": normalized_id})
+
             if doc:
                 return self._serialize_document(doc)
             return None
@@ -69,8 +88,21 @@ class DocumentRepository:
         try:
             db = get_database()
             collection = db[self.collection_name]
-            result = await collection.delete_one({"_id": ObjectId(document_id)})
-            return result.deleted_count > 0
+
+            normalized_id = str(document_id).strip()
+            result = None
+
+            try:
+                result = await collection.delete_one({"_id": ObjectId(normalized_id)})
+            except Exception:
+                result = None
+
+            if result is not None and result.deleted_count > 0:
+                return True
+
+            # Backward-compatible fallback delete path.
+            fallback = await collection.delete_one({"id": normalized_id})
+            return fallback.deleted_count > 0
         except Exception:
             return False
 

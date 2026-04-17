@@ -16,7 +16,15 @@ report_service = ReportService()
 assignment_service = AssignmentService()
 class_service = ClassService()
 auth_service = AuthService()
-bearer_scheme = HTTPBearer()
+bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def _require_auth_credentials(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> HTTPAuthorizationCredentials:
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return credentials
 
 
 def _require_auth_credentials(
@@ -94,7 +102,7 @@ async def list_assignment_reports(assignment_id: str) -> dict:
 )
 async def publish_assignment_reports(
     assignment_id: str,
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    credentials: HTTPAuthorizationCredentials = Depends(_require_auth_credentials),
 ) -> dict:
     requester_id, role = await _get_requester_context(credentials)
     if role not in {"teacher", "admin"}:
@@ -131,7 +139,7 @@ async def publish_assignment_reports(
     }
 
 
-@router.get("/reports/{report_id}/matches", status_code=status.HTTP_200_OK)
+@router.get("/{report_id}/matches", status_code=status.HTTP_200_OK)
 async def get_report_matches(report_id: str) -> dict:
     result = await report_service.get_report_matches(report_id)
     if not result:

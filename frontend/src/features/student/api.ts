@@ -114,10 +114,10 @@ export const fetchStudentCourseById = async (
 export const fetchStudentAssignments = async (
   courseId: string
 ): Promise<Assignment[]> => {
-  const res = await apiClient.get<
-    ApiEnvelope<{ class_id: string; assignments: BackendAssignment[] }>
-  >(`/classes/${courseId}/assignments`);
-  return (res.data.data.assignments ?? []).map(mapAssignment);
+  const res = await apiClient.get<ApiEnvelope<BackendAssignment[]>>(
+    `/classes/${courseId}/assignments`
+  );
+  return (res.data.data ?? []).map(mapAssignment);
 };
 
 /* ------------------------------------------------------------------ */
@@ -186,16 +186,26 @@ export const submitAssignment = async (
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await apiClient.post<ApiEnvelope<{ submission_id: string; submission: BackendSubmission }>>(
+  const res = await apiClient.post<ApiEnvelope<{ submission_id: string }>>(
     `/assignments/${assignmentId}/submit`,
     formData,
     { headers: { "Content-Type": "multipart/form-data" } }
   );
 
-  // If the backend returns a single submission in 'submission' field
-  // or we need to fetch it? The user said "Return: ... submissions: [SubmissionSummary] (or single submission if preferred)"
-  // I will assume the backend returns the created submission.
-  return mapSubmission(res.data.data.submission);
+  // Backend only returns submission_id, so fetch the full submission object
+  const submissionId = res.data.data.submission_id;
+  const submission = await fetchSubmission(submissionId);
+  if (!submission) throw new Error("Failed to fetch created submission");
+  return submission;
+};
+
+export const fetchSubmission = async (
+  submissionId: string
+): Promise<Submission | undefined> => {
+  const res = await apiClient.get<ApiEnvelope<BackendSubmission>>(
+    `/submissions/${submissionId}`
+  );
+  return mapSubmission(res.data.data);
 };
 
 export const useSubmitAssignment = () => {
@@ -219,7 +229,7 @@ export const fetchStudentSubmission = async (
       `/assignments/${assignmentId}/my-submission`
     );
     return mapSubmission(res.data.data);
-  } catch (error) {
+  } catch {
     return null;
   }
 };
@@ -229,4 +239,62 @@ export const useStudentSubmission = (assignmentId: string) =>
     queryKey: ["submission", assignmentId],
     queryFn: () => fetchStudentSubmission(assignmentId),
     enabled: !!assignmentId,
+  });
+
+/* ------------------------------------------------------------------ */
+/*  Plagiarism Report Types                                           */
+/* ------------------------------------------------------------------ */
+
+type AssignmentReport = {
+  report_id?: string;
+  assignment_id?: string;
+  generated_at?: string | null;
+  matrix?: Array<{
+    student_id?: string;
+    student_report_id?: string;
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
+};
+
+export type StudentReportEntry = {
+  student_report_id: string;
+  report_id?: string;
+  assignment_id?: string;
+  document_id?: string;
+  plagiarism_score?: number;
+  comparisons?: unknown;
+  [key: string]: unknown;
+};
+
+/* ------------------------------------------------------------------ */
+/*  Plagiarism Report API Functions                                   */
+/* ------------------------------------------------------------------ */
+
+export const fetchAssignmentReports = async (assignmentId: string): Promise<AssignmentReport[]> => {
+  const res = await apiClient.get<ApiEnvelope<AssignmentReport[]>>(
+    `/assignments/${assignmentId}/reports`
+  );
+  return res.data.data;
+};
+
+export const fetchStudentReport = async (studentReportId: string): Promise<StudentReportEntry> => {
+  const res = await apiClient.get<ApiEnvelope<StudentReportEntry>>(
+    `/reports/student/${studentReportId}`
+  );
+  return res.data.data;
+};
+
+export const useAssignmentReports = (assignmentId: string) =>
+  useQuery({
+    queryKey: ["assignment-reports", assignmentId],
+    queryFn: () => fetchAssignmentReports(assignmentId),
+    enabled: !!assignmentId,
+  });
+
+export const useStudentReport = (studentReportId: string | null | undefined) =>
+  useQuery({
+    queryKey: ["student-report", studentReportId],
+    queryFn: () => fetchStudentReport(studentReportId as string),
+    enabled: Boolean(studentReportId),
   });

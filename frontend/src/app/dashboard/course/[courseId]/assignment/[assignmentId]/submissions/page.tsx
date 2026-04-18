@@ -42,11 +42,12 @@ export default function AssignmentSubmissionsPage() {
   const handleRunPlagiarismCheck = async () => {
     try {
       await runPlagiarismMutation.mutateAsync(assignmentId);
-      toast.success("Plagiarism report generated");
-      router.push(`/dashboard/teacher/courses/${courseId}/assignment/${assignmentId}/report`);
+      toast.success("Plagiarism detection started. This may take a few minutes. You can check the reports page for updates.");
+      // Detection runs in background, don't redirect immediately
     } catch (error) {
       console.error("Failed to run plagiarism check:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to run plagiarism check");
+      const errorMessage = error instanceof Error ? error.message : "Failed to run plagiarism check";
+      toast.error(errorMessage);
     }
   };
 

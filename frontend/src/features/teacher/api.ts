@@ -128,25 +128,24 @@ export const fetchCourseById = async (courseId: string): Promise<Course | undefi
 };
 
 export const fetchAssignments = async (courseId: string): Promise<Assignment[]> => {
-  const res = await apiClient.get<ApiEnvelope<{ class_id: string; assignments: BackendAssignment[] }>>(
+  const res = await apiClient.get<ApiEnvelope<BackendAssignment[]>>(
     `/classes/${courseId}/assignments`
   );
-  return (res.data.data.assignments ?? []).map(mapAssignment);
+  return (res.data.data ?? []).map(mapAssignment);
 };
 
 export const fetchAssignmentById = async (assignmentId: string): Promise<Assignment | undefined> => {
-  // Response shape: AssignmentDetailResponse => { assignment: AssignmentDetails }
-  const res = await apiClient.get<ApiEnvelope<{ assignment: BackendAssignment }>>(
+  const res = await apiClient.get<ApiEnvelope<BackendAssignment>>(
     `/assignments/${assignmentId}`
   );
-  return mapAssignment(res.data.data.assignment);
+  return mapAssignment(res.data.data);
 };
 
 export const fetchSubmissions = async (assignmentId: string): Promise<Submission[]> => {
-  const res = await apiClient.get<
-    ApiEnvelope<{ assignment_id: string; submissions: BackendSubmission[] }>
-  >(`/assignments/${assignmentId}/submissions`);
-  return (res.data.data.submissions ?? []).map(mapSubmission);
+  const res = await apiClient.get<ApiEnvelope<BackendSubmission[]>>(
+    `/assignments/${assignmentId}/submissions`
+  );
+  return (res.data.data ?? []).map(mapSubmission);
 };
 
 export const runPlagiarismCheck = async (assignmentId: string): Promise<unknown> => {
@@ -159,6 +158,13 @@ export const runPlagiarismCheck = async (assignmentId: string): Promise<unknown>
 export const fetchAssignmentReports = async (assignmentId: string): Promise<AssignmentReport[]> => {
   const res = await apiClient.get<ApiEnvelope<AssignmentReport[]>>(
     `/assignments/${assignmentId}/reports`
+  );
+  return Array.isArray(res.data.data) ? res.data.data : [];
+};
+
+export const publishAssignmentReports = async (assignmentId: string): Promise<unknown> => {
+  const res = await apiClient.post<ApiEnvelope<unknown>>(
+    `/assignments/${assignmentId}/reports/publish`
   );
   return res.data.data;
 };
@@ -212,14 +218,17 @@ export const createAssignment = async (data: CreateAssignmentInput): Promise<Ass
   if (data.description) formData.append("description", data.description);
   if (data.dueDate) formData.append("due_date", data.dueDate);
 
-  // Response shape: AssignmentCreateResponse => { assignment: AssignmentDetails }
-  const res = await apiClient.post<ApiEnvelope<{ assignment: BackendAssignment }>>(
+  const res = await apiClient.post<ApiEnvelope<{ assignment_id: string }>>(
     `/classes/${data.courseId}/assignments`,
     formData,
     { headers: { "Content-Type": "multipart/form-data" } }
   );
 
-  return mapAssignment(res.data.data.assignment);
+  // After creating, fetch the full assignment object
+  const assignmentId = res.data.data.assignment_id;
+  const assignment = await fetchAssignmentById(assignmentId);
+  if (!assignment) throw new Error("Failed to fetch created assignment");
+  return assignment;
 };
 
 export const deleteAssignment = async (assignmentId: string): Promise<void> => {
@@ -268,13 +277,15 @@ export const useCourseStudents = (courseId: string) => {
     queryFn: () => fetchCourseStudents(courseId),
   });
 };
-
 export const useCreateAssignment = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createAssignment,
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["assignments", variables.courseId] });
+    },
+    onError: (error) => {
+      console.error("Failed to create assignment:", error);
     },
   });
 };
@@ -286,15 +297,39 @@ export const useDeleteAssignment = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["assignments"] });
     },
+    onError: (error) => {
+      console.error("Failed to delete assignment:", error);
+    },
   });
 };
 
 export const useRunPlagiarism = () => {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (assignmentId: string) => {
-      await runPlagiarismCheck(assignmentId);
-      const reports = await fetchAssignmentReports(assignmentId);
-      return getLatestReport(reports);
+      // Start detection in background and return immediately
+      const response = await runPlagiarismCheck(assignmentId);
+      return response;
+    },
+    onSuccess: (_, assignmentId) => {
+      // Invalidate reports cache to trigger refetch
+      queryClient.invalidateQueries({ queryKey: ["assignmentReports", assignmentId] });
+    },
+    onError: (error) => {
+      console.error("Failed to run plagiarism check:", error);
+    },
+  });
+};
+
+export const usePublishReports = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (assignmentId: string) => publishAssignmentReports(assignmentId),
+    onSuccess: (_, assignmentId) => {
+      queryClient.invalidateQueries({ queryKey: ["assignmentReports", assignmentId] });
+    },
+    onError: (error) => {
+      console.error("Failed to publish reports:", error);
     },
   });
 };

@@ -155,7 +155,7 @@ async def delete_document(
 
     success = await doc_service.delete_document(document_id)
     if not success:
-        raise HTTPException(status_code=500, detail="Failed to delete document")
+        raise HTTPException(status_code=404, detail="Document not found")
     return {"message": "Document deleted", "data": {"document_id": document_id}}
 
 

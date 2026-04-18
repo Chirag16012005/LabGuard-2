@@ -1,23 +1,49 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
-import { Loader2, ArrowLeft, Upload, FileCheck, Calendar, Info, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Loader2, ArrowLeft, Upload, FileCheck, Calendar, Info, Clock, CheckCircle2, AlertCircle, Eye } from "lucide-react";
 import { useStudentCourse } from "@/features/student/api";
 import { useAssignment } from "@/features/teacher/api"; // Reuse teacher query to avoid duplication
-import { useSubmitAssignment, useStudentSubmission } from "@/features/student/api";
+import { useSubmitAssignment, useStudentSubmission, useAssignmentReports, useStudentReport } from "@/features/student/api";
+import { useAuthStore } from "@/store/authStore";
+import { StudentReportView } from "@/components/plagiarism/StudentReportView";
 import { toast } from "sonner";
 
 export default function StudentAssignmentPage() {
   const { courseId, assignmentId } = useParams() as { courseId: string; assignmentId: string };
   const router = useRouter();
+  const user = useAuthStore((s) => s.user);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [showReport, setShowReport] = useState(false);
 
   const { data: course, isLoading: loadingCourse } = useStudentCourse(courseId);
   const { data: assignment, isLoading: loadingAssignment } = useAssignment(assignmentId);
   const { data: submission, isLoading: loadingSubmission } = useStudentSubmission(assignmentId);
+  const { data: reports, isLoading: loadingReports } = useAssignmentReports(assignmentId);
   
   const { mutate: submit, isPending: submitting } = useSubmitAssignment();
+
+  // Extract current student's report ID from the assignment reports matrix
+  const studentReportId = useMemo(() => {
+    if (!reports || !user) return null;
+    
+    const latestReport = [...(reports ?? [])].sort((a, b) => {
+      const aTime = a.generated_at ? Date.parse(a.generated_at) : 0;
+      const bTime = b.generated_at ? Date.parse(b.generated_at) : 0;
+      return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+    })[0];
+
+    if (!latestReport) return null;
+
+    const matrix = (latestReport.matrix as Array<Record<string, unknown>> | undefined) ?? [];
+    const studentEntry = matrix.find((entry) => entry.student_id === user.id);
+    
+    return studentEntry?.student_report_id as string | null;
+  }, [reports, user]);
+
+  // Fetch the student's specific report
+  const { data: studentReport, isLoading: loadingStudentReport, isError: reportError, error: reportErrorObj } = useStudentReport(showReport ? studentReportId : null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -47,7 +73,7 @@ export default function StudentAssignmentPage() {
     );
   };
 
-  if (loadingCourse || loadingAssignment || loadingSubmission) {
+  if (loadingCourse || loadingAssignment || loadingSubmission || loadingReports) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
@@ -218,6 +244,37 @@ export default function StudentAssignmentPage() {
               </div>
             )}
           </section>
+
+          {/* Plagiarism Report Section */}
+          {submission && (
+            <section className="space-y-4">
+              {!showReport ? (
+                <button
+                  onClick={() => setShowReport(true)}
+                  disabled={!studentReportId}
+                  className="w-full py-4 px-6 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 disabled:from-slate-300 disabled:to-slate-400 text-white rounded-xl font-bold transition-all shadow-lg shadow-purple-200 dark:shadow-none flex items-center justify-center gap-2"
+                >
+                  <Eye className="h-5 w-5" />
+                  View My Plagiarism Report
+                </button>
+              ) : (
+                <div className="space-y-4">
+                  <button
+                    onClick={() => setShowReport(false)}
+                    className="w-full py-2 px-4 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg font-semibold transition-colors"
+                  >
+                    ← Back to Assignment
+                  </button>
+                  <StudentReportView
+                    report={studentReport}
+                    isLoading={loadingStudentReport}
+                    isError={reportError}
+                    error={reportErrorObj}
+                  />
+                </div>
+              )}
+            </section>
+          )}
         </div>
 
         {/* Sidebar: Meta info */}

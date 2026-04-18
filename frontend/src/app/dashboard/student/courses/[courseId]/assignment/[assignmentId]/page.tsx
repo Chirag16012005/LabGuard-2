@@ -19,7 +19,7 @@ export default function StudentAssignmentPage() {
 
   const { data: course, isLoading: loadingCourse } = useStudentCourse(courseId);
   const { data: assignment, isLoading: loadingAssignment } = useAssignment(assignmentId);
-  const { data: submission, isLoading: loadingSubmission } = useStudentSubmission(assignmentId);
+  const { data: submission, isLoading: loadingSubmission } = useStudentSubmission(assignmentId, user?.id ?? null);
   const { data: reports, isLoading: loadingReports } = useAssignmentReports(assignmentId);
   
   const { mutate: submit, isPending: submitting } = useSubmitAssignment();
@@ -59,8 +59,7 @@ export default function StudentAssignmentPage() {
   const handleSubmit = () => {
     if (!selectedFile) return;
 
-    submit(
-      { assignmentId, file: selectedFile },
+    submit({assignmentId, file: selectedFile },
       {
         onSuccess: () => {
           toast.success("Assignment submitted successfully!");

@@ -222,23 +222,34 @@ export const useSubmitAssignment = () => {
 };
 
 export const fetchStudentSubmission = async (
-  assignmentId: string
+  assignmentId: string,
+  studentId: string | null
 ): Promise<Submission | null> => {
+  if (!studentId) return null;
+
   try {
     const res = await apiClient.get<ApiEnvelope<BackendSubmission>>(
-      `/assignments/${assignmentId}/my-submission`
+      `/assignments/${assignmentId}/submissions`
     );
-    return mapSubmission(res.data.data);
+
+    const submissions = Array.isArray(res.data.data) ? res.data.data : [];
+    const submission = submissions.find(
+      (item) => item.student_id === studentId
+    );
+    return submission ? mapSubmission(submission) : null;
   } catch {
     return null;
   }
 };
 
-export const useStudentSubmission = (assignmentId: string) =>
+export const useStudentSubmission = (
+  assignmentId: string,
+  studentId: string | null
+) =>
   useQuery({
-    queryKey: ["submission", assignmentId],
-    queryFn: () => fetchStudentSubmission(assignmentId),
-    enabled: !!assignmentId,
+    queryKey: ["submission", assignmentId, studentId],
+    queryFn: () => fetchStudentSubmission(assignmentId, studentId),
+    enabled: !!assignmentId && !!studentId,
   });
 
 /* ------------------------------------------------------------------ */

@@ -32,19 +32,34 @@ export const apiClient = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
+  timeout: 30000, // 30 second timeout for requests (in milliseconds)
 });
 
 apiClient.interceptors.request.use((config) => {
-  if (typeof window !== "undefined") {
+  // Add request logging with timing for debugging
+  if (typeof window !== "undefined" && config.url) {
+    const startTime = performance.now();
+    config.metadata = { startTime };
+    console.debug(
+      `[API] ${config.method?.toUpperCase()} ${config.url} (timeout: ${config.timeout}ms)`,
+      new Date().toLocaleTimeString()
+    );
+  }
+
+  if (typeof window !== "undefined") 
+  {
     const url = String(config.url ?? "");
     const isAuthLoginOrRegister = url.includes("/auth/login") || url.includes("/auth/register");
-    if (isAuthLoginOrRegister) return config;
+    if (isAuthLoginOrRegister) 
+    return config;
 
     const headers = (config.headers ?? {}) as AxiosRequestHeaders;
     const existingAuth = headers.Authorization ?? headers.authorization;
-    if (!existingAuth) {
+    if (!existingAuth) 
+    {
       const token = localStorage.getItem(TOKEN_STORAGE_KEY);
-      if (token) {
+      if (token) 
+      {
         headers.Authorization = `Bearer ${token}`;
         config.headers = headers;
       }
@@ -54,19 +69,32 @@ apiClient.interceptors.request.use((config) => {
 });
 
 apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => 
-    {
+  (response) => {
+    if (typeof window !== "undefined" && response.config?.url) {
+      console.debug("[API] Success:", response.status, response.config.url);
+    }
+    return response;
+  },
+  (error) => {
     const status = error?.response?.status;
     const url = String(error?.config?.url ?? "");
     const isAuthLoginOrRegister = url.includes("/auth/login") || url.includes("/auth/register");
     
-    if (status === 401 && typeof window !== "undefined" && !isAuthLoginOrRegister) 
-    {
+    // Log errors for debugging
+    if (typeof window !== "undefined") {
+      console.error("[API] Error:", status, url, error?.message);
+    }
+    
+    // Only redirect on 401 if we're not already on login page and it's a protected endpoint
+    if (status === 401 && typeof window !== "undefined" && !isAuthLoginOrRegister && window.location.pathname !== "/login") {
       clearPersistedAuth();
-      if (window.location.pathname !== "/login") 
-      {
-        window.location.href = "/login";
+      // Use a flag to prevent multiple redirects
+      const redirectFlag = sessionStorage.getItem("_redirecting_to_login");
+      if (!redirectFlag) {
+        sessionStorage.setItem("_redirecting_to_login", "true");
+        setTimeout(() => {
+          window.location.href = "/login";
+        }, 100);
       }
     }
 

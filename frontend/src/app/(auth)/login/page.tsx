@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -11,7 +11,33 @@ import { Mail, Lock, ArrowRight, Loader2, ShieldCheck } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
+  const user = useAuthStore((s) => s.user);
+  const hydrated = useAuthStore((s) => s.hydrated);
+  const hydrateFromStorage = useAuthStore((s) => s.hydrateFromStorage);
+  const logout = useAuthStore((s) => s.logout);
   const setUser = useAuthStore((s) => s.setUser);
+  const hydrateFromStorageRef = useRef(hydrateFromStorage);
+  const clearedInitialAuthRef = useRef(false);
+
+  useEffect(() => {
+    hydrateFromStorageRef.current = hydrateFromStorage;
+  }, [hydrateFromStorage]);
+
+  useEffect(() => {
+    hydrateFromStorageRef.current();
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (clearedInitialAuthRef.current) return;
+
+    // Only clear stale cached auth once when entering /login directly.
+    if (user) {
+      logout();
+    }
+
+    clearedInitialAuthRef.current = true;
+  }, [hydrated, user, logout]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -55,6 +81,8 @@ export default function LoginPage() {
 
   const errorMessage =
     validationError || (loginMutation.isError ? loginMutation.error.message : "");
+
+  if (!hydrated) return null;
 
   return (
     <div className="w-full max-w-md font-sans">

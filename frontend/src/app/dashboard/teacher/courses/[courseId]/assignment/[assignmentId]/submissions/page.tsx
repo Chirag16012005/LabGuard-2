@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   useAssignment,
   useSubmissions,
@@ -24,8 +24,41 @@ export default function TeacherAssignmentSubmissionsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const runPlagiarismMutation = useRunPlagiarism();
 
+  // Debug: Log when students data arrives
+  useEffect(() => {
+    console.log("📊 Students data received:", {
+      count: students?.length,
+      firstStudent: students?.[0],
+      loading: loadingStudents,
+    });
+  }, [students, loadingStudents]);
+
+  // Debug: Log submissions data
+  useEffect(() => {
+    console.log("📋 Submissions data received:", {
+      count: submissions?.length,
+      firstSubmission: submissions?.[0],
+      loading: loadingSubmissions,
+    });
+  }, [submissions, loadingSubmissions]);
+
   const mergedSubmissions = useMemo(() => {
-    if (!students || !submissions) return [];
+    if (!students || !submissions) {
+      console.warn("⚠️ Missing data for merge:", { studentsLoaded: !!students, submissionsLoaded: !!submissions });
+      return [];
+    }
+
+    if (students.length === 0) {
+      console.warn("⚠️ No students found for course:", courseId);
+    }
+
+    // Defensive: Log for debugging if names are missing
+    if (students.length > 0 && !students[0].fullName) {
+      console.warn("🔴 Student name missing from API response:", {
+        student: students[0],
+        fields: Object.keys(students[0]),
+      });
+    }
 
     const statusWeight: Record<string, number> = {
       submitted: 1,
@@ -36,19 +69,29 @@ export default function TeacherAssignmentSubmissionsPage() {
 
     const all = students.map(student => {
       const submission = submissions.find(s => s.studentId === student.id);
-      if (submission) return submission;
+      // Use fallbacks to ensure we always have a name
+      const studentName = student.fullName || student.email || "Unknown Student";
+      
+      if (submission) {
+        // Ensure studentName is populated from students lookup
+        // (backend may return student_id only, not student_name)
+        return {
+          ...submission,
+          studentName,
+        };
+      }
       
       return {
         assignmentId,
         studentId: student.id,
-        studentName: student.fullName,
+        studentName,
         status: "not_submitted" as const,
       } as Submission;
     });
 
     return all
       .filter(s => {
-        const matchesSearch = s.studentName.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSearch = (s.studentName || "").toLowerCase().includes(searchTerm.toLowerCase());
         const matchesFilter = statusFilter === "all" 
           ? true 
           : statusFilter === "missing" 
@@ -60,9 +103,19 @@ export default function TeacherAssignmentSubmissionsPage() {
         const weightA = statusWeight[a.status] || 99;
         const weightB = statusWeight[b.status] || 99;
         if (weightA !== weightB) return weightA - weightB;
-        return a.studentName.localeCompare(b.studentName);
+        const nameA = (a.studentName || "").toLowerCase();
+        const nameB = (b.studentName || "").toLowerCase();
+        return nameA.localeCompare(nameB);
       });
   }, [students, submissions, searchTerm, statusFilter, assignmentId]);
+
+  // Count valid submissions for plagiarism check
+  const validSubmissions = mergedSubmissions.filter(
+    s => s.status === "submitted" || s.status === "processing"
+  );
+
+  const submittedCount = validSubmissions.length;
+  const totalCount = students?.length || 0;
 
   if (loadingAssignment || loadingSubmissions || loadingStudents) {
     return (
@@ -86,17 +139,54 @@ export default function TeacherAssignmentSubmissionsPage() {
     );
   }
 
-  const submittedCount = submissions?.filter((s) => s.status === "submitted" || s.status === "processing").length || 0;
-  const totalCount = students?.length || 0;
-
   const handleRunPlagiarismCheck = async () => {
+    console.log("🔍 Starting plagiarism check for assignment:", assignmentId);
+    console.log("📊 Valid submissions count:", validSubmissions.length);
+
+    if (!assignmentId || !courseId) {
+      console.error("❌ Missing IDs - assignmentId:", assignmentId, "courseId:", courseId);
+      toast.error("Missing assignment or course ID");
+      return;
+    }
+
+    if (validSubmissions.length < 2) {
+      console.warn("⚠️ Not enough valid submissions:", validSubmissions.length);
+      toast.error("At least 2 submissions required for plagiarism detection");
+      return;
+    }
+
     try {
+      console.log("📤 Sending mutation request...");
       await runPlagiarismMutation.mutateAsync(assignmentId);
-      toast.success("Plagiarism report generated");
-      router.push(`/dashboard/teacher/courses/${courseId}/assignment/${assignmentId}/report`);
+      
+      console.log("✅ Mutation succeeded, showing success message");
+      toast.success("Plagiarism detection started. Processing submissions in background...");
+      
+      // Wait for backend to initiate job
+      console.log("⏳ Waiting 1 second before navigation...");
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Navigate to report page with error handling
+      const reportPath = `/dashboard/teacher/courses/${courseId}/assignment/${assignmentId}/report`;
+      console.log("🔗 Navigating to:", reportPath);
+      
+      try {
+        await router.push(reportPath);
+        console.log("✅ Navigation successful");
+      } catch (navError) {
+        console.error("❌ Navigation error:", navError);
+        // Navigation error is usually not critical - report page can be accessed later
+        toast.error("Navigation issue, but detection started. Check reports page manually.");
+      }
     } catch (error) {
-      console.error("Failed to run plagiarism check:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to run plagiarism check");
+      const errorMessage = error instanceof Error ? error.message : "Failed to run plagiarism check";
+      console.error("❌ Plagiarism check error:", error);
+      console.error("Error details:", {
+        name: error instanceof Error ? error.name : "Unknown",
+        message: errorMessage,
+        stack: error instanceof Error ? error.stack : "No stack"
+      });
+      toast.error(errorMessage);
     }
   };
 
@@ -126,16 +216,18 @@ export default function TeacherAssignmentSubmissionsPage() {
           <button
             type="button"
             onClick={handleRunPlagiarismCheck}
-            disabled={(submissions?.length ?? 0) < 2 || runPlagiarismMutation.isPending}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+            disabled={validSubmissions.length < 2 || runPlagiarismMutation.isPending}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-600"
           >
             {runPlagiarismMutation.isPending ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Running...
+                Running... (this may take several minutes)
               </>
             ) : (
-              "Run Plagiarism Check"
+              <>
+                Run Plagiarism Check
+              </>
             )}
           </button>
           <div className="text-right">

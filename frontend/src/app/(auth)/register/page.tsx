@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -11,7 +11,33 @@ import { Mail, Lock, ArrowRight, Loader2, ShieldCheck, User } from "lucide-react
 
 export default function RegisterPage() {
   const router = useRouter();
+  const user = useAuthStore((s) => s.user);
+  const hydrated = useAuthStore((s) => s.hydrated);
+  const hydrateFromStorage = useAuthStore((s) => s.hydrateFromStorage);
   const setUser = useAuthStore((s) => s.setUser);
+  const hydrateFromStorageRef = useRef(hydrateFromStorage);
+  const routerRef = useRef(router);
+
+  useEffect(() => {
+    hydrateFromStorageRef.current = hydrateFromStorage;
+  }, [hydrateFromStorage]);
+
+  useEffect(() => {
+    routerRef.current = router;
+  }, [router]);
+
+  useEffect(() => {
+    hydrateFromStorageRef.current();
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (user) {
+      routerRef.current.replace(
+        user.role === "teacher" ? "/dashboard/teacher" : "/dashboard/student"
+      );
+    }
+  }, [hydrated, user]);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -62,6 +88,9 @@ export default function RegisterPage() {
 
   const errorMessage =
     validationError || (registerMutation.isError ? registerMutation.error.message : "");
+
+  if (!hydrated) return null;
+  if (user) return null;
 
   return (
     <div className="w-full max-w-md font-sans">

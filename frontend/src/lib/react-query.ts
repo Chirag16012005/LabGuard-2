@@ -10,7 +10,9 @@ export function getQueryClient(): QueryClient {
       defaultOptions: {
         queries: {
           staleTime: 60 * 1000,
-          retry: 1,
+          retry: false, // Don't retry failed queries automatically (backend may be down)
+          refetchOnWindowFocus: false, // Don't refetch when tab regains focus
+          refetchOnReconnect: false, // Don't auto-refetch on network reconnect
         },
       },
     });

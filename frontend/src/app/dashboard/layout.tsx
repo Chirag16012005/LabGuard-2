@@ -4,7 +4,7 @@ import { useAuthStore } from "@/store/authStore";
 import { LogOut, LayoutDashboard, FileText,BookOpen } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname, useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import { twMerge } from "tailwind-merge";
 import { logoutApi } from "@/lib/api-client";
@@ -27,12 +27,22 @@ function cn(...inputs: (string | undefined | null | false)[]) {
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user, logout, hydrated, hydrateFromStorage } = useAuthStore();
+  const { user, logout, hydrated } = useAuthStore();
+  const hydrateFromStorage = useAuthStore((state) => state.hydrateFromStorage);
   const router = useRouter();
   const pathname = usePathname();
   const params = useParams<{ courseId?: string | string[] }>();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  // const [mounted, setMounted] = useState(false);
+  const hydrateFromStorageRef = useRef(hydrateFromStorage);
+  const routerRef = useRef(router);
+
+  useEffect(() => {
+    hydrateFromStorageRef.current = hydrateFromStorage;
+  }, [hydrateFromStorage]);
+
+  useEffect(() => {
+    routerRef.current = router;
+  }, [router]);
 
   const courseId = useMemo(() => {
     const raw = params?.courseId;
@@ -65,15 +75,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return last.replace("-", " ");
   }, [courseHeaderQuery.data?.class_code, courseHeaderQuery.data?.name, courseId, pathname]);
 
+  // Hydrate auth state once on client mount.
   useEffect(() => {
-    hydrateFromStorage();
-  }, [hydrateFromStorage]);
+    hydrateFromStorageRef.current();
+  }, []);
 
   useEffect(() => {
-    if (hydrated && !user) {
-      router.replace("/login");
+    if (!hydrated) return;
+
+    if (!user) {
+      routerRef.current.replace("/login");
     }
-  }, [hydrated, user, router]);
+  }, [hydrated, user]);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -82,15 +95,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       // Best-effort: even if server logout fails, clear local session.
     }
     logout();
-    router.push("/login");
+    
+    // Use replace instead of push to avoid showing dashboard in back history
+    // If router fails, fall back to direct URL navigation
+    try {
+      await router.replace("/login");
+    } catch {
+      if (typeof window !== "undefined") {
+        window.location.href = "/login";
+      }
+    }
   }, [logout, router]);
 
   if (!hydrated) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-sky-500 border-t-transparent" />
-      </div>
-    );
+    return null;
   }
 
   if (!user) return null;

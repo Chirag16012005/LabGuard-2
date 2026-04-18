@@ -18,17 +18,6 @@ export default function CoursesPage()
   const createCourseMutation = useCreateCourse();
 
   const [showForm, setShowForm] = useState(false);
-  const [joinCodeByCourseId, setJoinCodeByCourseId] = useState<Record<string, string>>(() => {
-    if (typeof window === "undefined") return {};
-    const raw = window.localStorage.getItem(JOIN_CODE_STORAGE_KEY);
-    if (!raw) return {};
-    try {
-      return JSON.parse(raw) as Record<string, string>;
-    } catch {
-      window.localStorage.removeItem(JOIN_CODE_STORAGE_KEY);
-      return {};
-    }
-  });
   const [copiedCourseId, setCopiedCourseId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<CreateCoursePayload>({
@@ -40,63 +29,24 @@ export default function CoursesPage()
 
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Derive joinCode directly from courses query (already includes joinCode)
+  // No need for separate state or fetching
   const resolvedJoinCodeByCourseId = useMemo(() => {
-    const merged = { ...joinCodeByCourseId };
-    for (const course of courses ?? []) {
-      if (course.joinCode && !merged[course.id]) {
-        merged[course.id] = course.joinCode;
+    if (!courses || courses.length === 0) return {};
+    return courses.reduce((acc, course) => {
+      if (course.joinCode) {
+        acc[course.id] = course.joinCode;
       }
-    }
-    return merged;
-  }, [joinCodeByCourseId, courses]);
+      return acc;
+    }, {} as Record<string, string>);
+  }, [courses]);
 
+  // Sync to localStorage only when courses data actually changes
+  // Single effect, no circular dependencies
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !courses || courses.length === 0) return;
     window.localStorage.setItem(JOIN_CODE_STORAGE_KEY, JSON.stringify(resolvedJoinCodeByCourseId));
-  }, [resolvedJoinCodeByCourseId]);
-
-  useEffect(() => {
-    if (!courses || courses.length === 0) return;
-
-    const missingCourseIds = courses
-      .filter((course) => !resolvedJoinCodeByCourseId[course.id])
-      .map((course) => course.id);
-
-    if (missingCourseIds.length === 0) return;
-
-    let cancelled = false;
-
-    const loadMissingJoinCodes = async () => {
-      const results = await Promise.all(
-        missingCourseIds.map(async (courseId) => ({
-          courseId,
-          detail: await fetchCourseById(courseId),
-        }))
-      );
-
-      if (cancelled) return;
-
-      setJoinCodeByCourseId((prev) => {
-        let changed = false;
-        const next = { ...prev };
-
-        for (const result of results) {
-          if (result.detail?.joinCode && next[result.courseId] !== result.detail.joinCode) {
-            next[result.courseId] = result.detail.joinCode;
-            changed = true;
-          }
-        }
-
-        return changed ? next : prev;
-      });
-    };
-
-    loadMissingJoinCodes();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [courses, resolvedJoinCodeByCourseId]);
+  }, [courses]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -122,10 +72,8 @@ export default function CoursesPage()
 
     try {
       const result = await createCourseMutation.mutateAsync(formData);
-      setJoinCodeByCourseId((prev) => ({
-        ...prev,
-        [result.classId]: result.joinCode,
-      }));
+      // React Query handles refetch via onSuccess in useCreateCourse hook
+      // No manual state update needed - resolvedJoinCodeByCourseId will update automatically
       setCopiedCourseId(null);
       setShowForm(false);
       setFormData({ name: "", class_code: "", description: "", section: "" });

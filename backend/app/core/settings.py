@@ -14,6 +14,14 @@ class Settings(BaseSettings):
     jwt_secret: str = "your-secret-key-change-in-production"
     jwt_algorithm: str = "HS256"
     jwt_expiration_hours: int = 24
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str | None = None
+    smtp_use_tls: bool = True
+    password_reset_url: str | None = None
+    google_oauth_client_id: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

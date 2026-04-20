@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
@@ -9,10 +9,12 @@ import {
   fetchAssignmentReports,
   fetchSubmissions,
   getLatestReport,
+  usePublishReports,
 } from "@/features/teacher/api";
 import { PlagiarismReport } from "@/components/plagiarism/PlagiarismReport";
 import { useAuthStore } from "@/store/authStore";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 type ReportLike = {
   documents?: unknown;
@@ -67,6 +69,8 @@ export default function TeacherAssignmentReportPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const isTeacher = user?.role === "teacher";
+  const [published, setPublished] = useState(false);
+  const publishReportsMutation = usePublishReports();
 
   useEffect(() => {
     if (!user) {
@@ -84,7 +88,7 @@ export default function TeacherAssignmentReportPage() {
     isLoading,
     isError,
   } = useQuery({
-    queryKey: ["assignment-reports", assignmentId],
+    queryKey: ["assignmentReports", assignmentId],
     queryFn: () => fetchAssignmentReports(assignmentId),
     enabled: Boolean(assignmentId) && isTeacher,
   });
@@ -138,11 +142,42 @@ export default function TeacherAssignmentReportPage() {
     );
   }
 
+  const handlePublishReports = async () => {
+    try {
+      await publishReportsMutation.mutateAsync(assignmentId);
+      setPublished(true);
+      toast.success("Reports are now visible to students");
+    } catch (error) {
+      console.error("Failed to publish reports:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to publish reports");
+    }
+  };
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-        Plagiarism Report{assignment?.title ? ` — ${assignment.title}` : ""}
-      </h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+          Plagiarism Report{assignment?.title ? ` — ${assignment.title}` : ""}
+        </h1>
+
+        <button
+          type="button"
+          onClick={handlePublishReports}
+          disabled={published || publishReportsMutation.isPending}
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+        >
+          {publishReportsMutation.isPending ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Publishing...
+            </>
+          ) : published ? (
+            "Published"
+          ) : (
+            "Publish Reports to Students"
+          )}
+        </button>
+      </div>
       <PlagiarismReport report={displayReport ?? null} />
     </div>
   );

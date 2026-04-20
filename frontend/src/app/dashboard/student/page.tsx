@@ -52,7 +52,7 @@ export default function StudentDashboardPage() {
     }
   };
 
-  if (!mounted || !user || user.role !== "student") return null;
+  if ( !user || user.role !== "student") return null;
 
   if (isLoading) {
     return (

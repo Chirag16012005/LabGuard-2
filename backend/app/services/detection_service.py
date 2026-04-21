@@ -55,7 +55,7 @@ class PlagiarismConfig:
     # LSH: threshold for candidate selection. Lower = more candidates (more comparisons)
     # 0.5 means: MinHash Jaccard >= 0.5 needed to be considered candidates
     # Conservative threshold to catch more potential plagiarism
-    lsh_threshold: float = 0.5
+    lsh_threshold: float = 0.4
 
     # GST: minimum tile/match length in tokens. 
     # 5 tokens = ~2-3 typical words, balances specificity vs. sensitivity
@@ -65,7 +65,7 @@ class PlagiarismConfig:
     # Raw text similarity threshold after edit distance.
     # 0.75 means: 75% textual match required (allows for minor edits)
     # Range: [0.7, 0.85] for production
-    raw_similarity_threshold: float = 0.75
+    raw_similarity_threshold: float = 0.6
 
     # POS sequence similarity threshold.
     # 0.7 allows structural changes (paraphrasing) while finding similarities
@@ -332,7 +332,9 @@ class PlagiarismDetector:
             Dict mapping document_id -> [doc_id, doc_group, plagiarism_score]
             where doc_group maps target_doc_id -> [passages_list, similarity_score]
         """
-        logger.info("Starting plagiarism detection pipeline")
+        logger.info("=" * 100)
+        logger.info("🔍 STARTING PLAGIARISM DETECTION PIPELINE")
+        logger.info("=" * 100)
         docs_list = list(documents)
         
         # Validate inputs
@@ -340,7 +342,9 @@ class PlagiarismDetector:
             logger.warning("Insufficient documents for comparison: %d (need >= 2)", len(docs_list))
             return {}
 
-        logger.info("Comparing %d documents", len(docs_list))
+        logger.info("📊 Comparing %d documents", len(docs_list))
+        for doc in docs_list:
+            logger.info("  - Document ID: %s, Content length: %d chars", doc.id, len(doc.content))
         doc_map: Dict[str, Document] = {d.id: d for d in docs_list}
 
         # STAGE 10: Stylometry analysis - analyze writing style for all documents
@@ -349,12 +353,15 @@ class PlagiarismDetector:
         for doc_id, doc in doc_map.items():
             try:
                 stylometry_map[doc_id] = self.stylometry.analyze(doc.content)
+                logger.debug("  Stylometry for %s: %s", doc_id, stylometry_map[doc_id])
             except Exception as e:
                 logger.warning("Failed to analyze stylometry for %s: %s", doc_id, e)
                 stylometry_map[doc_id] = {}
 
         # STAGES 2-4: Shingling, MinHash, LSH - find candidate pairs 
-        logger.debug("Stage 2: Building shingles...")
+        logger.info("\n" + "=" * 100)
+        logger.info("⚙️  STAGE 2: SHINGLING - Building k-word shingles...")
+        logger.info("=" * 100)
         shingles_by_doc = self._build_shingles(docs_list)
 
         if not shingles_by_doc:
@@ -368,15 +375,23 @@ class PlagiarismDetector:
             logger.warning("No candidate pairs found via LSH")
             return {doc.id: [doc.id, {}, 0.0] for doc in docs_list}
 
-        logger.info(
-            "Found %d candidate document pairs via LSH (%.1f%% of O(n²))",
+        logger.info("\n" + "=" * 100)
+        logger.info("🔗 STAGE 3-4: LSH CANDIDATE FINDING")
+        logger.info("=" * 100)
+        logger.info("Found %d candidate document pairs via LSH (%.1f%% of O(n²))",
             len(candidates),
             len(candidates) / (len(docs_list) * (len(docs_list) - 1) / 2) * 100
             if len(docs_list) > 1 else 0,
         )
+        for i, (doc_a, doc_b, approx_jaccard) in enumerate(candidates[:5]):
+            logger.info("  Candidate %d: %s <-> %s (Jaccard≈%.3f)", i+1, doc_a, doc_b, approx_jaccard)
+        if len(candidates) > 5:
+            logger.info("  ... and %d more candidate pairs", len(candidates) - 5)
 
         # Stage 1: Preprocess all documents once
-        logger.debug("Stage 1: Preprocessing all documents...")
+        logger.info("\n" + "=" * 100)
+        logger.info("📝 STAGE 1: PREPROCESSING - Normalizing and tokenizing...")
+        logger.info("=" * 100)
         preprocessed: Dict[str, Tuple[str, List[str]]] = {}
         for doc_id, doc in doc_map.items():
             try:
@@ -385,16 +400,23 @@ class PlagiarismDetector:
                 logger.error("Failed to preprocess document %s: %s", doc_id, e)
                 preprocessed[doc_id] = ("", [])
 
+        logger.info("✅ Preprocessing complete:")
+        for doc_id, (normalized, tokens) in preprocessed.items():
+            logger.info("  %s: %d normalized chars, %d tokens", doc_id, len(normalized), len(tokens))
+
         all_passages: List[PassageMatch] = []
 
         # Stage 5-9: Process each candidate pair
-        logger.debug("Stages 5-9: Processing %d candidate pairs with GST and verification...", len(candidates))
+        logger.info("\n" + "=" * 100)
+        logger.info("🔏 STAGE 5-9: PASSAGE DETECTION (GST) & VERIFICATION")
+        logger.info("=" * 100)
+        logger.debug("Processing %d candidate pairs with GST and verification...", len(candidates))
         tiles_found = 0
         gst_filtered = 0
         raw_sim_filtered = 0
         pos_sim_filtered = 0
         
-        for doc_a, doc_b, approx_jaccard in candidates:
+        for candidate_idx, (doc_a, doc_b, approx_jaccard) in enumerate(candidates):
             if approx_jaccard <= 0:
                 logger.debug("Skipping candidate (%s, %s): Jaccard %.3f <= 0", doc_a, doc_b, approx_jaccard)
                 continue
@@ -406,17 +428,19 @@ class PlagiarismDetector:
                 logger.debug("Skipping candidate (%s, %s): empty token sequence", doc_a, doc_b)
                 continue
 
+            logger.info("\n📍 Processing Candidate %d/%d: %s <-> %s (Jaccard≈%.3f)", 
+                       candidate_idx + 1, len(candidates), doc_a, doc_b, approx_jaccard)
+            logger.info("  Tokens: %d vs %d", len(tokens_a), len(tokens_b))
+
             # Stage 5: Greedy String Tiling
             tiles = self.gst.find_tiles(tokens_a, tokens_b)
             if not tiles:
+                logger.info("  ❌ No tiles found by GST")
                 gst_filtered += 1
                 continue
 
+            logger.info("  ✓ GST found %d tiles", len(tiles))
             tiles_found += len(tiles)
-            logger.debug(
-                "Candidate (%s, %s) Jaccard=%.3f: found %d tiles",
-                doc_a, doc_b, approx_jaccard, len(tiles)
-            )
 
             # Process each tile
             for tile in tiles:
@@ -442,7 +466,12 @@ class PlagiarismDetector:
                     
                     # Stage 7: Edit distance on raw text
                     raw_sim = self.edit_distance.raw_text_similarity(seg_a, seg_b)
+                    logger.debug("    Tile[%d-%d vs %d-%d]: raw_similarity = %.4f", 
+                                tile.src_start, tile.src_end, tile.dst_start, tile.dst_end, raw_sim)
+                    
                     if raw_sim < self.config.raw_similarity_threshold:
+                        logger.debug("      ❌ FILTERED by raw_sim threshold (%.4f < %.4f)", 
+                                    raw_sim, self.config.raw_similarity_threshold)
                         raw_sim_filtered += 1
                         continue
 
@@ -450,14 +479,20 @@ class PlagiarismDetector:
                     if self.pos_similarity is None:
                         # POS analysis unavailable; use neutral score
                         pos_sim = 1.0
+                        logger.debug("      ⚠️  POS analysis unavailable, using neutral score 1.0")
                     else:
                         pos_sim = self.pos_similarity.similarity(seg_a, seg_b)
+                        logger.debug("      pos_similarity = %.4f", pos_sim)
                     
                     if pos_sim < self.config.pos_similarity_threshold:
+                        logger.debug("      ❌ FILTERED by pos_sim threshold (%.4f < %.4f)", 
+                                    pos_sim, self.config.pos_similarity_threshold)
                         pos_sim_filtered += 1
                         continue
 
                     # All checks passed! Record this passage match
+                    logger.info("      ✅ PASSAGE ACCEPTED! raw_sim=%.4f, pos_sim=%.4f, passage_len=%d chars", 
+                               raw_sim, pos_sim, len(seg_a))
                     all_passages.append(
                         PassageMatch(
                             source_doc_id=doc_a,
@@ -476,18 +511,32 @@ class PlagiarismDetector:
                     continue
 
         logger.info(
-            "Passage verification summary: "
-            "%d tiles found, %d filtered by GST, %d by raw_sim, %d by pos_sim",
+            "\n📊 PASSAGE VERIFICATION SUMMARY:"
+        )
+        logger.info(
+            "  Total tiles found: %d | Fixed by GST: %d | Filtered by raw_sim: %d | Filtered by pos_sim: %d",
             tiles_found, gst_filtered, raw_sim_filtered, pos_sim_filtered
         )
+        logger.info("  ✅ Total ACCEPTED passages: %d", len(all_passages))
 
         # Stage 11: Merge overlapping passages
-        logger.debug("Stage 11: Merging overlapping passages...")
+        logger.info("\n" + "=" * 100)
+        logger.info("🔗 STAGE 11: MERGING - Combining overlapping passages (max_gap=5)...")
+        logger.info("=" * 100)
+        logger.debug("Merging %d detected passages...", len(all_passages))
         merged = merge_overlapping_passages(all_passages, max_gap=5)
-        logger.info("Merged %d passages into %d groups (max_gap=5)", len(all_passages), len(merged))
+        logger.info("✅ Merged %d passages into %d groups", len(all_passages), len(merged))
+        
+        for i, merged_p in enumerate(merged[:5]):
+            logger.debug("  Merged group %d: %s vs %s, chars %d-%d, sim=%.4f, pos_sim=%.4f",
+                        i+1, merged_p.source_doc_id, merged_p.target_doc_id, 
+                        merged_p.source_start, merged_p.source_end, 
+                        merged_p.similarity, merged_p.pos_similarity)
 
         # Stage 12: Generate reports
-        logger.debug("Stage 12: Generating plagiarism reports...")
+        logger.info("\n" + "=" * 100)
+        logger.info("📋 STAGE 12: REPORT GENERATION - Computing final similarity scores...")
+        logger.info("=" * 100)
         reports = self._build_reports(doc_map, merged, stylometry_map)
         
         logger.info("Plagiarism detection completed successfully")
@@ -500,12 +549,15 @@ class PlagiarismDetector:
         Converts token index to approximate character position assuming
         tokens are joined with single spaces.
         
+        FIXED: Corrected off-by-one error that was causing passages to not cover
+        the complete document.
+        
         Example:
             tokens = ["hello", "world", "foo"]
             _approx_char_offset(tokens, 0) = 0      # "hello" starts at char 0
             _approx_char_offset(tokens, 1) = 6      # "world" starts at char 6 (5 + 1 space)
             _approx_char_offset(tokens, 2) = 12     # "foo" starts at char 12
-            _approx_char_offset(tokens, 3) = 15     # past end (5+1+5+1)
+            _approx_char_offset(tokens, 3) = 15     # past end
         
         Args:
             tokens: List of token strings
@@ -524,12 +576,14 @@ class PlagiarismDetector:
         if token_index <= 0:
             return 0
         
+        # For past-end, return position after all tokens
         if token_index >= len(tokens):
-            # Return character position after all tokens
-            return sum(len(t) + 1 for t in tokens) - 1  # Don't count final space
+            # All token lengths + (number of tokens - 1) spaces
+            return sum(len(t) for t in tokens) + len(tokens) - 1
 
-        # Sum lengths of tokens before this index, plus spaces between them
-        return sum(len(t) + 1 for t in tokens[:token_index]) - 1
+        # Position of token_index = sum of lengths before + token_index spaces
+        # (there are token_index spaces before token_index when starting from position 0)
+        return sum(len(t) for t in tokens[:token_index]) + token_index
 
     def _stylometry_similarity(
         self,
@@ -613,9 +667,9 @@ class PlagiarismDetector:
             Combined similarity score [0, 1]
         """
         # Weight components
-        alpha = 0.5   # raw text similarity weight
+        alpha = 0.6   # raw text similarity weight
         beta = 0.3    # POS similarity weight
-        gamma = 0.2   # stylometry similarity weight
+        gamma = 0.1   # stylometry similarity weight
 
         # Ensure safe denominator
         doc_length = max(doc_length, 1)
@@ -697,6 +751,9 @@ class PlagiarismDetector:
                     pos_similarity=p.pos_similarity,
                 )
             )
+        
+        logger.info("\n📍 REPORT BUILDING - Processing similarity calculations:")
+        logger.info("=" * 100)
 
         # 🔥 STEP 2: Build reports for each document
         reports: Dict[str, List] = {}
@@ -707,6 +764,8 @@ class PlagiarismDetector:
             # Calculate safe document length (avoid division by zero)
             doc_content = docs[doc_id].content or ""
             doc_length = max(len(doc_content), 1)
+
+            logger.info("\n📄 Document: %s (length=%d chars)", doc_id, doc_length)
 
             if doc_id in grouped:
                 for target_doc_id, passage_list in grouped[doc_id].items():
@@ -742,8 +801,8 @@ class PlagiarismDetector:
                     ]
 
                     logger.debug(
-                        "Document %s vs %s: %d passages, similarity=%.3f, stylometry=%.3f",
-                        doc_id, target_doc_id, len(passages_list), similarity_score, stylometry_sim
+                        "  vs %s: %d passages, similarity=%.3f, stylometry=%.3f",
+                        target_doc_id, len(passages_list), similarity_score, stylometry_sim
                     )
 
             # 🔥 Ensure all documents appear in comparisons (even if 0 similarity)
@@ -755,6 +814,8 @@ class PlagiarismDetector:
             all_passages_flat = []
             for target_doc_id, (passages_list, _) in doc_group.items():
                 all_passages_flat.extend(passages_list)
+
+            logger.debug("  📊 Calculating final plagiarism score from %d total passages", len(all_passages_flat))
 
             # Convert to PassageMatch for merging within this document
             passages_for_merge = [
@@ -773,6 +834,7 @@ class PlagiarismDetector:
 
             # Merge overlapping passages within this document
             merged_passages = merge_overlapping_passages(passages_for_merge, max_gap=0)
+            logger.debug("  📊 After merging: %d passage groups", len(merged_passages))
 
             # Compute score from merged passages
             # Weights: 60% raw text similarity, 40% POS sequence similarity
@@ -782,7 +844,10 @@ class PlagiarismDetector:
             plagiarism_score = 0.0
             total_plagiarized_chars = 0
             
-            for mp in merged_passages:
+            logger.debug("  📋 SCORE CALCULATION BREAKDOWN (y_weight=%.2f, z_weight=%.2f):", y_weight, z_weight)
+            logger.debug("  Overall doc_length: %d chars", doc_length)
+            
+            for idx, mp in enumerate(merged_passages):
                 k = mp.source_end - mp.source_start  # characters in this plagiarized passage
                 edit_sim = mp.similarity
                 pos_sim = mp.pos_similarity
@@ -791,10 +856,22 @@ class PlagiarismDetector:
                 passage_contribution = (k / doc_length) * (y_weight * edit_sim + z_weight * pos_sim)
                 plagiarism_score += passage_contribution
                 total_plagiarized_chars += k
+                
+                logger.debug(
+                    "    Passage %d: chars[%d-%d] (len=%d) | raw_sim=%.4f | pos_sim=%.4f | "
+                    "weight=%.4f | contribution=%.6f",
+                    idx + 1, mp.source_start, mp.source_end, k, edit_sim, pos_sim, 
+                    k / doc_length, passage_contribution
+                )
 
             # Convert to percentage (0-100 scale)
             overall_plagiarism_score = plagiarism_score * 100.0
             overall_plagiarism_score = min(100.0, max(0.0, overall_plagiarism_score))
+            
+            logger.info(
+                "  ✅ FINAL RESULT - Raw score: %.6f → Percentage: %.2f%% | Total plagiarized: %d/%d chars",
+                plagiarism_score, overall_plagiarism_score, total_plagiarized_chars, doc_length
+            )
 
             reports[doc_id] = [
                 doc_id,
@@ -810,8 +887,88 @@ class PlagiarismDetector:
                 doc_length,
                 len([t for t in doc_group if doc_group[t][1] > 0]),
             )
+            
 
+        # STEP 4: Enforce symmetric similarity between document pairs
+        logger.info("\n" + "=" * 100)
+        logger.info("[SYMMETRY] ENFORCING SYMMETRIC SIMILARITY - Ensuring consistency between document pairs...")
+        logger.info("=" * 100)
+        self._enforce_symmetric_similarity(reports)
+
+        logger.info("\n" + "=" * 100)
+        logger.info("[SUCCESS] PLAGIARISM DETECTION COMPLETED SUCCESSFULLY")
+        logger.info("=" * 100)
+        logger.info("[SUMMARY] FINAL RESULTS (after symmetry enforcement):")
+        for doc_id, (_, doc_group, score) in reports.items():
+            for target_id, (_, sim) in doc_group.items():
+                if sim > 0:
+                    logger.info("  %s vs %s: %.2f%% similarity", doc_id, target_id, sim)
+        logger.info("=" * 100) 
+        
+        
+        
         return reports
+
+    def _enforce_symmetric_similarity(self, reports: Dict[str, List]) -> None:
+        """Enforce symmetric similarity scores between document pairs.
+        
+        For every pair (docA, docB), ensures:
+            reports[A].doc_group[B].similarity =
+            reports[B].doc_group[A].similarity =
+            max(sim_AB, sim_BA)
+        
+        This prevents inconsistencies and ensures stable clustering results.
+        
+        Example:
+            Before: doc1 → doc2 = 0.80, doc2 → doc1 = 0.85
+            After:  doc1 → doc2 = 0.85, doc2 → doc1 = 0.85
+        
+        Modifies reports in-place. Only updates similarity scores; passages remain unchanged.
+        
+        Args:
+            reports: Dict mapping document_id -> [doc_id, doc_group, plagiarism_score]
+                     where doc_group[target_id] = [passages_list, similarity_score]
+        """
+        logger.debug("[SYMMETRY] Enforcing symmetric similarity across %d documents...", len(reports))
+        processed_pairs = set()
+        updates_count = 0
+        
+        for doc_a, (_, group_a, _) in reports.items():
+            for doc_b, (passages_a, sim_ab) in group_a.items():
+                # Skip if already processed (avoid duplicate work)
+                if (doc_a, doc_b) in processed_pairs or (doc_b, doc_a) in processed_pairs:
+                    continue
+                
+                # Mark as processed
+                processed_pairs.add((doc_a, doc_b))
+                
+                # Check if reverse pair exists
+                if doc_b not in reports or doc_a not in reports[doc_b][1]:
+                    logger.debug(
+                        "  [WARN] Reverse pair (%s, %s) not found in reports; skipping",
+                        doc_b, doc_a
+                    )
+                    continue
+                
+                # Get reverse similarity
+                passages_b, sim_ba = reports[doc_b][1][doc_a]
+                
+                # Compute maximum similarity
+                max_sim = max(sim_ab, sim_ba)
+                
+                # Update both directions if changed
+                if abs(max_sim - sim_ab) > 1e-6 or abs(max_sim - sim_ba) > 1e-6:
+                    logger.debug(
+                        "  [PAIR] (%s, %s): [%.4f, %.4f] -> max(%.4f) = symmetric [%.4f, %.4f]",
+                        doc_a, doc_b, sim_ab, sim_ba, max_sim, max_sim, max_sim
+                    )
+                    
+                    # Update both directions to maximum
+                    reports[doc_a][1][doc_b][1] = max_sim
+                    reports[doc_b][1][doc_a][1] = max_sim
+                    updates_count += 1
+        
+        logger.info("[SUCCESS] Symmetric similarity enforcement complete: %d pairs synchronized", updates_count)
 
     def find_similar_document_clusters(
         self,

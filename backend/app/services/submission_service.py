@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 from ..repositories.submission_repository import SubmissionRepository
+from ..repositories.user_repository import UserRepository
 from .document_management_service import DocumentManagementService
 
 
@@ -11,6 +12,7 @@ class SubmissionService:
 
     def __init__(self) -> None:
         self.submission_repo = SubmissionRepository()
+        self.user_repo = UserRepository()
         self.document_service = DocumentManagementService()
 
     async def submit_assignment(
@@ -40,7 +42,29 @@ class SubmissionService:
 
     async def list_submissions(self, assignment_id: str) -> list[dict]:
         """List all submissions for an assignment."""
-        return await self.submission_repo.list_assignment_submissions(assignment_id)
+        submissions = await self.submission_repo.list_assignment_submissions(assignment_id)
+        if not submissions:
+            return []
+
+        student_ids = list(
+            {
+                str(item.get("student_id"))
+                for item in submissions
+                if item.get("student_id")
+            }
+        )
+
+        users = await self.user_repo.get_users_by_ids(student_ids) if student_ids else []
+        names_by_id = {
+            str(user.get("id")): (user.get("full_name") or user.get("email") or "Unknown student")
+            for user in users
+        }
+
+        for submission in submissions:
+            student_id = str(submission.get("student_id") or "")
+            submission["student_name"] = names_by_id.get(student_id, "Unknown student")
+
+        return submissions
 
     async def get_student_submission(
         self, assignment_id: str, student_id: str

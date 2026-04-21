@@ -32,14 +32,14 @@ export const apiClient = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
-  timeout: 30000, // 30 second timeout for requests (in milliseconds)
+  timeout: 300000, // 30 second timeout for requests (in milliseconds)
 });
 
 apiClient.interceptors.request.use((config) => {
   // Add request logging with timing for debugging
   if (typeof window !== "undefined" && config.url) {
-    const startTime = performance.now();
-    config.metadata = { startTime };
+    // const startTime = performance.now();
+    // config.metadata = { startTime };
     console.debug(
       `[API] ${config.method?.toUpperCase()} ${config.url} (timeout: ${config.timeout}ms)`,
       new Date().toLocaleTimeString()

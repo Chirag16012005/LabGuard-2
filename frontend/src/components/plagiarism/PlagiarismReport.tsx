@@ -5,8 +5,21 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { useStudentReport } from "@/features/teacher/api";
 import { StudentReportDetails } from "@/components/plagiarism/StudentReportDetails";
 
-interface PlagiarismReportProps {
+interface SubmissionData {
+  documentId?: string | null;
+  studentName: string;
+  studentId: string;
+}
+
+interface StudentData {
+  id: string;
+  fullName: string;
+}
+
+interface UpdatedPlagiarismReportProps {
   report: unknown;
+  submissions?: SubmissionData[];
+  students?: StudentData[];
 }
 
 type Comparison = {
@@ -137,8 +150,28 @@ function SegmentedBar({ score }: { score: number }) {
   );
 }
 
-export function PlagiarismReport({ report }: PlagiarismReportProps) {
+export function PlagiarismReport(props: UpdatedPlagiarismReportProps) {
+  const { report, submissions = [], students = [] } = props;
   const parsed = useMemo(() => parseReport(report), [report]);
+
+  const documentIdToStudentName = useMemo(() => {
+    const studentIdToName = new Map(
+      students.map((student) => [student.id, student.fullName])
+    );
+
+    const mapping = new Map<string, string>();
+    submissions.forEach((submission) => {
+      if (submission.documentId) {
+        const name =
+          studentIdToName.get(submission.studentId) ||
+          submission.studentName ||
+          "Unknown student";
+        mapping.set(submission.documentId, name);
+      }
+    });
+    return mapping;
+  }, [submissions, students]);
+
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
   const [selectedStudentReportId, setSelectedStudentReportId] = useState<string | null>(null);
 
@@ -231,15 +264,22 @@ export function PlagiarismReport({ report }: PlagiarismReportProps) {
                 key={row.student_report_id}
                 className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md dark:border-slate-800 dark:bg-slate-900"
               >
-                <button
-                  type="button"
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => toggleExpanded(row.student_report_id)}
-                  className="flex w-full items-start justify-between gap-4 bg-slate-50/60 p-5 text-left transition-colors hover:bg-slate-100/60 dark:bg-slate-800/30 dark:hover:bg-slate-800/50"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      toggleExpanded(row.student_report_id);
+                    }
+                  }}
+                  className="flex w-full cursor-pointer items-start justify-between gap-4 bg-slate-50/60 p-5 text-left transition-colors hover:bg-slate-100/60 dark:bg-slate-800/30 dark:hover:bg-slate-800/50"
                 >
                   <div className="min-w-0">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Document</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Student</p>
                     <p className="mt-1 truncate text-sm font-semibold text-slate-900 dark:text-white">
-                      {row.document_id}
+                      {documentIdToStudentName.get(row.document_id) || row.document_id}
                     </p>
                     <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">Plagiarism score</p>
                   </div>
@@ -266,7 +306,7 @@ export function PlagiarismReport({ report }: PlagiarismReportProps) {
                       {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     </span>
                   </div>
-                </button>
+                </div>
 
                 <div
                   className={
@@ -305,7 +345,7 @@ export function PlagiarismReport({ report }: PlagiarismReportProps) {
                               }
                             >
                               <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">
-                                {comparison.document_id}
+                                {documentIdToStudentName.get(comparison.document_id) || comparison.document_id}
                               </td>
                               <td className="px-4 py-3">
                                 <span className={`font-semibold ${toneClasses[tone].text}`}>

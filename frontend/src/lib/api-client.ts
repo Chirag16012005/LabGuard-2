@@ -200,3 +200,33 @@ export async function logoutApi(): Promise<void> {
   if (!token) return;
   await apiClient.post("/auth/logout");
 }
+
+export async function changePasswordApi(input: {
+  currentPassword: string;
+  newPassword: string;
+}): Promise<{ loggedOut?: boolean }> {
+  const response = await apiClient.post<ApiEnvelope<{ logged_out?: boolean }>>(
+    "/auth/change-password",
+    {
+      current_password: input.currentPassword,
+      new_password: input.newPassword,
+    }
+  );
+
+  return {
+    loggedOut: response.data.data?.logged_out,
+  };
+}
+
+export async function forgotPasswordApi(email: string): Promise<void> {
+  await apiClient.post("/auth/forgot-password", {
+    email,
+  });
+}
+
+export async function resetPasswordApi(token: string, newPassword: string): Promise<void> {
+  await apiClient.post("/auth/reset-password", {
+    token,
+    new_password: newPassword,
+  });
+}

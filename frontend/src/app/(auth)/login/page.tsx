@@ -1,27 +1,31 @@
 "use client";
 
-import { useState, FormEvent, useEffect, useRef } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useMutation } from "@tanstack/react-query";
+import { ArrowRight, Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
+
 import { loginApi } from "@/lib/api-client";
 import { useAuthStore } from "@/store/authStore";
 import { LoginCredentials } from "@/types/auth";
-import { Mail, Lock, ArrowRight, Loader2, ShieldCheck } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const hydrated = useAuthStore((s) => s.hydrated);
   const hydrateFromStorage = useAuthStore((s) => s.hydrateFromStorage);
-  const logout = useAuthStore((s) => s.logout);
   const setUser = useAuthStore((s) => s.setUser);
   const hydrateFromStorageRef = useRef(hydrateFromStorage);
-  const clearedInitialAuthRef = useRef(false);
+  const routerRef = useRef(router);
 
   useEffect(() => {
     hydrateFromStorageRef.current = hydrateFromStorage;
   }, [hydrateFromStorage]);
+
+  useEffect(() => {
+    routerRef.current = router;
+  }, [router]);
 
   useEffect(() => {
     hydrateFromStorageRef.current();
@@ -29,15 +33,12 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!hydrated) return;
-    if (clearedInitialAuthRef.current) return;
-
-    // Only clear stale cached auth once when entering /login directly.
     if (user) {
-      logout();
+      routerRef.current.replace(
+        user.role === "teacher" ? "/dashboard/teacher" : "/dashboard/student"
+      );
     }
-
-    clearedInitialAuthRef.current = true;
-  }, [hydrated, user, logout]);
+  }, [hydrated, user]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -46,8 +47,7 @@ export default function LoginPage() {
   const loginMutation = useMutation({
     mutationFn: (credentials: LoginCredentials) => loginApi(credentials),
     onSuccess: (data) => {
-      localStorage.setItem("token", data.token);
-      setUser(data.user, data.token); // Assume teacher or student comes from backend payload
+      setUser(data.user, data.token);
       router.push(data.user.role === "teacher" ? "/dashboard/teacher" : "/dashboard/student");
     },
   });
@@ -71,48 +71,32 @@ export default function LoginPage() {
       return;
     }
 
-    if (password.length < 6) {
-      setValidationError("Password must be at least 6 characters.");
-      return;
-    }
-
     loginMutation.mutate({ email, password });
   }
 
-  const errorMessage =
-    validationError || (loginMutation.isError ? loginMutation.error.message : "");
+  const errorMessage = validationError || (loginMutation.isError ? loginMutation.error.message : "");
 
   if (!hydrated) return null;
+  if (user) return null;
 
   return (
     <div className="w-full max-w-md font-sans">
-      {/* Brand header */}
       <div className="mb-8 text-center">
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-100 bg-white shadow-sm">
           <ShieldCheck className="h-7 w-7 text-blue-600" strokeWidth={1.5} />
         </div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-800">
-          Welcome back
-        </h1>
-        <p className="mt-1.5 text-sm text-slate-500">
-          Sign in to your LabGuard account
-        </p>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-800">Welcome back</h1>
+        <p className="mt-1.5 text-sm text-slate-500">Sign in to continue to LabGuard</p>
       </div>
 
-      {/* Card */}
-      <div className="rounded-2xl border border-blue-50 bg-white p-6 sm:p-8 shadow-sm">
-        {/* Error message */}
+      <div className="rounded-2xl border border-blue-50 bg-white p-6 shadow-sm sm:p-8">
         {errorMessage && (
           <div
             id="login-error"
             role="alert"
             className="mb-5 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
           >
-            <svg
-              className="mt-0.5 h-4 w-4 shrink-0"
-              viewBox="0 0 16 16"
-              fill="currentColor"
-            >
+            <svg className="mt-0.5 h-4 w-4 shrink-0" viewBox="0 0 16 16" fill="currentColor">
               <path
                 fillRule="evenodd"
                 d="M8 15A7 7 0 108 1a7 7 0 000 14zm-.75-4.5a.75.75 0 001.5 0v-4a.75.75 0 00-1.5 0v4zm.75-6.5a.75.75 0 100 1.5.75.75 0 000-1.5z"
@@ -124,12 +108,8 @@ export default function LoginPage() {
         )}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-          {/* Email field */}
           <div className="flex flex-col gap-1.5">
-            <label
-              htmlFor="email"
-              className="text-sm font-medium text-slate-700"
-            >
+            <label htmlFor="email" className="text-sm font-medium text-slate-700">
               Email
             </label>
             <div className="relative">
@@ -150,22 +130,10 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Password field */}
           <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
-              <label
-                htmlFor="password"
-                className="text-sm font-medium text-slate-700"
-              >
-                Password
-              </label>
-              <button
-                type="button"
-                className="text-xs font-medium text-blue-600 transition-colors duration-200 hover:text-blue-700"
-              >
-                Forgot password?
-              </button>
-            </div>
+            <label htmlFor="password" className="text-sm font-medium text-slate-700">
+              Password
+            </label>
             <div className="relative">
               <Lock
                 className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
@@ -184,7 +152,15 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Submit button */}
+          <div className="flex justify-end">
+            <Link
+              href="/forgot-password"
+              className="text-xs font-medium text-slate-500 transition-colors duration-200 hover:text-slate-700"
+            >
+              Forgot your password?
+            </Link>
+          </div>
+
           <button
             id="login-submit"
             type="submit"
@@ -204,49 +180,12 @@ export default function LoginPage() {
             )}
           </button>
         </form>
-
-        {/* Divider */}
-        <div className="my-6 flex items-center gap-3">
-          <div className="h-px flex-1 bg-slate-100" />
-          <span className="text-xs text-slate-400">or</span>
-          <div className="h-px flex-1 bg-slate-100" />
-        </div>
-
-        {/* Social login placeholder */}
-        <button
-          type="button"
-          className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-all duration-200 hover:translate-y-[-1px] hover:bg-[#F0F7FF] hover:border-blue-100"
-        >
-          <svg className="h-4 w-4" viewBox="0 0 24 24">
-            <path
-              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
-              fill="#4285F4"
-            />
-            <path
-              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-              fill="#34A853"
-            />
-            <path
-              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-              fill="#FBBC05"
-            />
-            <path
-              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-              fill="#EA4335"
-            />
-          </svg>
-          Continue with Google
-        </button>
       </div>
 
-      {/* Footer link */}
       <p className="mt-6 text-center text-sm text-slate-500">
-        Don&apos;t have an account?{" "}
-        <Link
-          href="/register"
-          className="font-medium text-blue-600 transition-colors duration-200 hover:text-blue-700"
-        >
-          Create account
+        Don’t have an account?{" "}
+        <Link href="/register" className="font-medium text-blue-600 transition-colors duration-200 hover:text-blue-700">
+          Create one
         </Link>
       </p>
     </div>

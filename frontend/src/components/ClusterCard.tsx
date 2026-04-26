@@ -12,7 +12,7 @@ type ClusterCardProps = {
 
 export default function ClusterCard({ cluster, clusterLabel, memberNames }: ClusterCardProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const hasHighSimilaritySignal = cluster.size >= 3;
+  const hasHighSimilaritySignal = cluster.size >= 13;
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white transition-all duration-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900">

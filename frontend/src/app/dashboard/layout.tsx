@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuthStore } from "@/store/authStore";
-import { LogOut, LayoutDashboard, FileText,BookOpen } from "lucide-react";
+import { LogOut, LayoutDashboard, FileText, BookOpen, UserCircle2, Lock } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname, useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -118,11 +118,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       ? [
           { name: "Dashboard", href: "/dashboard/teacher", icon: LayoutDashboard },
           { name: "Courses", href: "/dashboard/courses", icon: FileText },
+          { name: "Profile", href: "/dashboard/profile", icon: UserCircle2 },
         ]
       : [
           { name: "Dashboard", href: "/dashboard/student", icon: LayoutDashboard },
           { name: "Courses", href: "/dashboard/student", icon: BookOpen },
           { name: "Documents", href: "/dashboard/documents", icon: FileText },
+          { name: "Profile", href: "/dashboard/profile", icon: UserCircle2 },
         ];
 
   return (
@@ -173,6 +175,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <span className="text-sm font-bold text-slate-800 dark:text-slate-200">{user.name}</span>
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider dark:text-slate-400">{user.role}</span>
             </div>
+            <Link
+              href="/dashboard/settings/change-password"
+              onClick={() => setSidebarOpen(false)}
+              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-all hover:translate-y-[-1px] hover:bg-slate-50 hover:text-blue-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-blue-400"
+            >
+              <Lock className="h-4 w-4" strokeWidth={1.5} />
+              Change Password
+            </Link>
             <button
               onClick={handleLogout}
               className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-all hover:translate-y-[-1px] hover:bg-slate-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-red-400"

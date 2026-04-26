@@ -177,6 +177,17 @@ export function PlagiarismReport(props: UpdatedPlagiarismReportProps) {
 
   const studentReportQuery = useStudentReport(selectedStudentReportId);
 
+  const selectedStudentName = useMemo(() => {
+    if (!selectedStudentReportId) return null;
+
+    const selectedRow = parsed.matrix.find(
+      (row) => row.student_report_id === selectedStudentReportId
+    );
+    if (!selectedRow) return null;
+
+    return documentIdToStudentName.get(selectedRow.document_id) || selectedRow.document_id;
+  }, [selectedStudentReportId, parsed.matrix, documentIdToStudentName]);
+
   const highSimilarityPairs = useMemo(() => {
     const total = parsed.matrix.reduce((acc, row) => {
       return acc + row.comparisons.filter((cmp) => cmp.similarity > 70).length;
@@ -372,6 +383,7 @@ export function PlagiarismReport(props: UpdatedPlagiarismReportProps) {
         open={Boolean(selectedStudentReportId)}
         studentReport={studentReportQuery.data}
         studentReportId={selectedStudentReportId}
+        studentName={selectedStudentName}
         isLoading={studentReportQuery.isLoading}
         isError={studentReportQuery.isError}
         onCloseAction={() => setSelectedStudentReportId(null)}

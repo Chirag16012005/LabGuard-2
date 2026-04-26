@@ -36,9 +36,12 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null;
 };
 
-const normalizePercent = (value: unknown): number => {
+const normalizePercent = (value: unknown): number => 
+  {
   const num = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(num)) return 0;
+  if (!Number.isFinite(num)) 
+    return 0;
+
   const percent = num <= 1 ? num * 100 : num;
   return Math.max(0, Math.min(100, percent));
 };
@@ -51,20 +54,27 @@ const getTone = (score: number): RiskTone => {
 
 type ParsedStudentReport = {
   student_report_id: string;
+  student_name?: string;
   plagiarism_score: number;
   comparisons: Comparison[];
 };
 
 const parseStudentReport = (raw: unknown, fallbackId?: string | null): ParsedStudentReport | null => {
-  if (!isRecord(raw)) return null;
+  if (!isRecord(raw)) 
+    return null;
 
   const student_report_id = String(raw.student_report_id ?? fallbackId ?? "").trim();
+  const student_name = String(
+    raw.student_name ?? raw.full_name ?? raw.studentName ?? raw.name ?? ""
+  ).trim();
   const plagiarism_score = normalizePercent(raw.plagiarism_score);
 
   const comparisonsRaw = Array.isArray(raw.comparisons) ? raw.comparisons : [];
   const comparisons: Comparison[] = comparisonsRaw
-    .map((cmp) => {
-      if (!isRecord(cmp)) return null;
+    .map((cmp) => 
+      {
+      if (!isRecord(cmp)) 
+        return null;
       return {
         document_id: String(cmp.document_id ?? "Unknown"),
         similarity: normalizePercent(cmp.similarity),
@@ -75,7 +85,12 @@ const parseStudentReport = (raw: unknown, fallbackId?: string | null): ParsedStu
     .sort((a, b) => b.similarity - a.similarity);
 
   if (!student_report_id) return null;
-  return { student_report_id, plagiarism_score, comparisons };
+  return {
+    student_report_id,
+    student_name: student_name || undefined,
+    plagiarism_score,
+    comparisons,
+  };
 };
 
 function SegmentedBar({ score }: { score: number }) {
@@ -100,6 +115,7 @@ export function StudentReportDetails({
   open,
   studentReport,
   studentReportId,
+  studentName,
   isLoading,
   isError,
   onCloseAction,
@@ -107,6 +123,7 @@ export function StudentReportDetails({
   open: boolean;
   studentReport: unknown;
   studentReportId?: string | null;
+  studentName?: string | null;
   isLoading?: boolean;
   isError?: boolean;
   onCloseAction: () => void;
@@ -120,6 +137,7 @@ export function StudentReportDetails({
 
   const score = parsed?.plagiarism_score ?? 0;
   const tone = getTone(score);
+  const displayStudentName = parsed?.student_name ?? studentName ?? parsed?.student_report_id ?? studentReportId ?? "Student report";
 
   return (
     <div
@@ -149,7 +167,7 @@ export function StudentReportDetails({
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Student Report</p>
               <h3 className="mt-1 truncate text-lg font-semibold text-slate-900 dark:text-white">
-                {parsed?.student_report_id ?? studentReportId ?? "Student report"}
+                {displayStudentName}
               </h3>
             </div>
 

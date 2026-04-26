@@ -91,18 +91,24 @@ export default function TeacherAssignmentReportPage() {
     queryKey: ["assignmentReports", assignmentId],
     queryFn: () => fetchAssignmentReports(assignmentId),
     enabled: Boolean(assignmentId) && isTeacher,
+    staleTime: 5000,
+    gcTime: 10 * 60 * 1000,
   });
 
   const { data: assignment, isLoading: loadingAssignment } = useQuery({
     queryKey: ["assignment", assignmentId],
     queryFn: () => fetchAssignmentById(assignmentId),
     enabled: Boolean(assignmentId) && isTeacher,
+    staleTime: 30 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
   const { data: submissions, isLoading: loadingSubmissions } = useQuery({
     queryKey: ["submissions", assignmentId],
     queryFn: () => fetchSubmissions(assignmentId),
     enabled: Boolean(assignmentId) && isTeacher,
+    staleTime: 30 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
   const latestReport = useMemo(() => {

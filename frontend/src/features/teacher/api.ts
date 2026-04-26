@@ -197,9 +197,16 @@ export const fetchCourseStudents = async (courseId: string): Promise<CourseStude
   const res = await apiClient.get<ApiEnvelope<{ class_id: string; students: BackendStudent[] }>>(
     `/classes/${courseId}/students`
   );
-  return (res.data.data.students ?? []).map((s:BackendStudent) => ({
+  const students = res.data.data.students ?? [];
+  
+  // Debug: check if student names are populated
+  if (students.length > 0 && !students[0].full_name) {
+    console.warn("Backend returned empty full_name for students:", students[0]);
+  }
+  
+  return students.map((s: BackendStudent) => ({
     id: s.id,
-    fullName: s.full_name,
+    fullName: s.full_name || s.email?.split("@")[0] || "Unknown",
     email: s.email,
   }));
 };
@@ -240,6 +247,8 @@ export const useCourses = () => {
   return useQuery({
     queryKey: ["courses"],
     queryFn: fetchCourses,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
   });
 };
 
@@ -247,6 +256,8 @@ export const useCourse = (courseId: string) => {
     return useQuery({
       queryKey: ["course", courseId],
       queryFn: () => fetchCourseById(courseId),
+      staleTime: 10 * 60 * 1000,
+      gcTime: 30 * 60 * 1000,
     });
 };
 
@@ -254,6 +265,8 @@ export const useAssignments = (courseId: string) => {
   return useQuery({
     queryKey: ["assignments", courseId],
     queryFn: () => fetchAssignments(courseId),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
   });
 };
 
@@ -261,6 +274,8 @@ export const useAssignment = (assignmentId: string) => {
     return useQuery({
       queryKey: ["assignment", assignmentId],
       queryFn: () => fetchAssignmentById(assignmentId),
+      staleTime: 5 * 60 * 1000,
+      gcTime: 30 * 60 * 1000,
     });
 };
 
@@ -268,6 +283,8 @@ export const useSubmissions = (assignmentId: string) => {
   return useQuery({
     queryKey: ["submissions", assignmentId],
     queryFn: () => fetchSubmissions(assignmentId),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
   });
 };
 
@@ -275,6 +292,8 @@ export const useCourseStudents = (courseId: string) => {
   return useQuery({
     queryKey: ["course-students", courseId],
     queryFn: () => fetchCourseStudents(courseId),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
   });
 };
 export const useCreateAssignment = () => {

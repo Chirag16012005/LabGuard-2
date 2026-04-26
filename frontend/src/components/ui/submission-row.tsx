@@ -17,7 +17,7 @@ export function SubmissionRow({ submission }: SubmissionRowProps) {
       <div className="flex items-center gap-4">
         <div className="flex flex-col">
           <span className="font-medium text-slate-800 dark:text-slate-200">
-            {submission.studentName}
+            {submission.studentName || "Unknown Student"}
           </span>
           {isSubmitted && submission.submittedAt ? (
             <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-1 dark:text-slate-400">

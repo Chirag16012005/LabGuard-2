@@ -38,8 +38,8 @@ async def root():
     return JSONResponse({
         "message": "Plagiarism Detection API",
         "version": "1.0.0",
-        "documentation": "http://127.0.0.1:8000/docs",
-        "openapi": "http://127.0.0.1:8000/openapi.json",
+        "documentation": "http://127.0.0.1:8001/docs",
+        "openapi": "http://127.0.0.1:8001/openapi.json",
         "api_base": "/api/v1",
     })
 

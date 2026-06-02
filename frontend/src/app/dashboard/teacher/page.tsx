@@ -3,7 +3,7 @@
 import { useEffect} from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowRight, BookOpen, ClipboardCheck, Loader2, Users } from "lucide-react";
+import { ArrowRight, BookOpen, ClipboardCheck, Loader2, Users, AlertCircle } from "lucide-react";
 
 import { useAuthStore } from "@/store/authStore";
 import { useCourses } from "@/features/teacher/api";
@@ -27,24 +27,16 @@ export default function TeacherDashboardPage() {
     // }
   }, [user, router]);
  
-  const { data: courses, isLoading } = useCourses();
+  const { data: courses, isLoading, isError, error } = useCourses();
  
   if (!user || user.role !== "teacher") 
     return null;
 
-  if (isLoading) 
-  {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-      </div>
-    );
-  }
-
+  // Non-blocking render - show content immediately, load courses in background
   const teacherStats = [
     { label: "Active Courses", value: courses?.length || 0, icon: BookOpen, color: "text-blue-500" },
     { label: "Students Enrolled", value: 0, icon: Users, color: "text-green-500" },
-    { label: "Pending Submissions", value: 42, icon: ClipboardCheck, color: "text-amber-500" },
+    { label: "Pending Submissions", value: 0, icon: ClipboardCheck, color: "text-amber-500" },
   ];
 
   return (
@@ -89,7 +81,20 @@ export default function TeacherDashboardPage() {
           </Link>
         </div>
 
-        {courses && courses.length > 0 ? (
+        {isLoading ? (
+          <div className="p-12 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center gap-2 text-slate-500 dark:border-slate-800">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Loading courses...</span>
+          </div>
+        ) : isError ? (
+          <div className="p-4 border border-red-200 rounded-xl bg-red-50 dark:bg-red-900/20 dark:border-red-800 flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium text-red-900 dark:text-red-200">Failed to load courses</p>
+              <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error?.message || "Please try refreshing the page"}</p>
+            </div>
+          </div>
+        ) : courses && courses.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {courses.slice(0, 3).map((course) => (
               <CourseCard key={course.id} course={course} />

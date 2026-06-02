@@ -54,27 +54,7 @@ export default function StudentDashboardPage() {
 
   if ( !user || user.role !== "student") return null;
 
-  if (isLoading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 space-y-3">
-        <p className="text-red-500 font-medium">
-          Failed to load courses
-        </p>
-        <p className="text-sm text-slate-500">
-          {error instanceof Error ? error.message : "Please try again later."}
-        </p>
-      </div>
-    );
-  }
-
+  // Non-blocking render - show UI immediately while loading courses in background
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -159,11 +139,27 @@ export default function StudentDashboardPage() {
 
       {/* Course Grid */}
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
-          My Courses
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
+            My Courses
+          </h2>
+          {isLoading && (
+            <div className="flex items-center gap-1 text-xs text-slate-500">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Loading...
+            </div>
+          )}
+        </div>
 
-        {courses && courses.length > 0 ? (
+        {isError ? (
+          <div className="p-4 border border-red-200 rounded-xl bg-red-50 dark:bg-red-900/20 dark:border-red-800 flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium text-red-900 dark:text-red-200">Failed to load courses</p>
+              <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error?.message || "Please try refreshing the page"}</p>
+            </div>
+          </div>
+        ) : courses && courses.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {courses.map((course) => (
               <CourseCard

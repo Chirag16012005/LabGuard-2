@@ -8,6 +8,7 @@ import {
   fetchAssignmentById,
   fetchAssignmentReports,
   fetchSubmissions,
+  useCourseStudents,
   getLatestReport,
   usePublishReports,
 } from "@/features/teacher/api";
@@ -65,14 +66,19 @@ const withStudentNames = (rawReport: unknown, labels: Map<string, string>): unkn
 };
 
 export default function TeacherAssignmentReportPage() {
-  const { assignmentId } = useParams() as { assignmentId: string };
+  const { courseId, assignmentId } = useParams() as { courseId: string; assignmentId: string };
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const hydrated = useAuthStore((s) => s.hydrated);
   const isTeacher = user?.role === "teacher";
   const [published, setPublished] = useState(false);
   const publishReportsMutation = usePublishReports();
 
   useEffect(() => {
+    if (!hydrated) {
+      return;
+    }
+
     if (!user) {
       router.replace("/login");
       return;
@@ -81,7 +87,7 @@ export default function TeacherAssignmentReportPage() {
     if (user.role !== "teacher") {
       router.replace("/dashboard/student");
     }
-  }, [user, router]);
+  }, [hydrated, user, router]);
 
   const {
     data: reports,
@@ -91,19 +97,27 @@ export default function TeacherAssignmentReportPage() {
     queryKey: ["assignmentReports", assignmentId],
     queryFn: () => fetchAssignmentReports(assignmentId),
     enabled: Boolean(assignmentId) && isTeacher,
+    staleTime: 5000,
+    gcTime: 10 * 60 * 1000,
   });
 
   const { data: assignment, isLoading: loadingAssignment } = useQuery({
     queryKey: ["assignment", assignmentId],
     queryFn: () => fetchAssignmentById(assignmentId),
     enabled: Boolean(assignmentId) && isTeacher,
+    staleTime: 30 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
   const { data: submissions, isLoading: loadingSubmissions } = useQuery({
     queryKey: ["submissions", assignmentId],
     queryFn: () => fetchSubmissions(assignmentId),
     enabled: Boolean(assignmentId) && isTeacher,
+    staleTime: 30 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
+
+  const { data: students } = useCourseStudents(courseId);
 
   const latestReport = useMemo(() => {
     return getLatestReport(reports ?? []);
@@ -122,6 +136,14 @@ export default function TeacherAssignmentReportPage() {
   const displayReport = useMemo(() => {
     return withStudentNames(latestReport ?? null, documentLabels);
   }, [latestReport, documentLabels]);
+
+  if (!hydrated) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+      </div>
+    );
+  }
 
   if (!user || !isTeacher) return null;
 
@@ -178,7 +200,11 @@ export default function TeacherAssignmentReportPage() {
           )}
         </button>
       </div>
-      <PlagiarismReport report={displayReport ?? null} />
+      <PlagiarismReport
+        report={displayReport ?? null}
+        submissions={submissions}
+        students={students}
+      />
     </div>
   );
 }

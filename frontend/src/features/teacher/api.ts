@@ -14,7 +14,35 @@ type AssignmentReport = {
   report_id?: string;
   assignment_id?: string;
   generated_at?: string | null;
+  average_similarity?: number;
+  max_similarity?: number;
+  documents?: unknown[];
+  matrix?: unknown[];
+  is_published?: boolean;
   [key: string]: unknown;
+};
+
+export type DetectionJob = {
+  job_id: string;
+  assignment_id?: string;
+  status: "starting" | "processing" | "completed" | "failed" | string;
+  report_id?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type DetectionJobStatusResponse = ApiEnvelope<DetectionJob>;
+
+export type Cluster = {
+  cluster_id: string;
+  members: string[];
+  size: number;
+};
+
+export type ClusterResponse = {
+  assignment_id: string;
+  clusters: Cluster[];
+  report_id: string;
 };
 
 export type StudentReportEntry = {
@@ -148,11 +176,92 @@ export const fetchSubmissions = async (assignmentId: string): Promise<Submission
   return (res.data.data ?? []).map(mapSubmission);
 };
 
-export const runPlagiarismCheck = async (assignmentId: string): Promise<unknown> => {
-  const res = await apiClient.post<ApiEnvelope<unknown>>(`/detection/run`, {
+export const runPlagiarismCheck = async (assignmentId: string): Promise<DetectionJob> => {
+  const res = await apiClient.post<ApiEnvelope<DetectionJob>>(`/detection/run`, {
     assignment_id: assignmentId,
   });
   return res.data.data;
+};
+
+export const getDetectionJob = async (jobId: string): Promise<DetectionJob> => {
+  if (!jobId || !jobId.trim()) {
+    throw new Error("A valid detection job ID is required");
+  }
+
+  try {
+    console.log("[plagiarism] Fetching detection job status", { jobId });
+    const res = await apiClient.get<DetectionJobStatusResponse>(`/detection/jobs/${jobId}`);
+    const job = res.data.data;
+
+    if (!job?.job_id) {
+      throw new Error("Detection job response did not include a job_id");
+    }
+
+    console.log("[plagiarism] Detection job status received", {
+      jobId,
+      status: job.status,
+      reportId: job.report_id,
+    });
+
+    return job;
+  } catch (error) {
+    console.error("[plagiarism] Failed to fetch detection job status", { jobId, error });
+    throw error instanceof Error
+      ? error
+      : new Error("Failed to fetch plagiarism detection job status");
+  }
+};
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export const pollDetectionJob = async (
+  jobId: string,
+  options?: { onUpdate?: (status: string) => void }
+): Promise<DetectionJob> => {
+  if (!jobId || !jobId.trim()) {
+    throw new Error("A valid detection job ID is required");
+  }
+
+  const maxRetries = 10;
+  const intervalMs = 4000;
+
+  console.log("[plagiarism] Polling detection job until completion", {
+    jobId,
+    maxRetries,
+    intervalMs,
+  });
+
+  for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
+    console.log("[plagiarism] Polling detection job status", { jobId, attempt });
+
+    const job = await getDetectionJob(jobId);
+    const status = String(job.status ?? "").toLowerCase();
+    options?.onUpdate?.(status);
+    console.log("Job status:", job.status);
+
+    console.log("[plagiarism] Polled detection job status", {
+      jobId,
+      attempt,
+      status,
+      reportId: job.report_id,
+    });
+
+    if (status === "completed") {
+      console.log("[plagiarism] Detection job completed", { jobId, attempt });
+      return job;
+    }
+
+    if (status === "failed") {
+      throw new Error("Plagiarism detection failed");
+    }
+
+    if (attempt < maxRetries) {
+      await delay(intervalMs);
+    }
+  }
+
+  console.error("[plagiarism] Detection job polling timed out", { jobId, maxRetries });
+  throw new Error("Detection timed out. Please try again.");
 };
 
 export const fetchAssignmentReports = async (assignmentId: string): Promise<AssignmentReport[]> => {
@@ -160,6 +269,13 @@ export const fetchAssignmentReports = async (assignmentId: string): Promise<Assi
     `/assignments/${assignmentId}/reports`
   );
   return Array.isArray(res.data.data) ? res.data.data : [];
+};
+
+export const fetchAssignmentClusters = async (assignmentId: string): Promise<ClusterResponse> => {
+  const res = await apiClient.get<ApiEnvelope<ClusterResponse>>(
+    `/assignments/${assignmentId}/clusters`
+  );
+  return res.data.data;
 };
 
 export const publishAssignmentReports = async (assignmentId: string): Promise<unknown> => {
@@ -197,9 +313,16 @@ export const fetchCourseStudents = async (courseId: string): Promise<CourseStude
   const res = await apiClient.get<ApiEnvelope<{ class_id: string; students: BackendStudent[] }>>(
     `/classes/${courseId}/students`
   );
-  return (res.data.data.students ?? []).map((s:BackendStudent) => ({
+  const students = res.data.data.students ?? [];
+  
+  // Debug: check if student names are populated
+  if (students.length > 0 && !students[0].full_name) {
+    console.warn("Backend returned empty full_name for students:", students[0]);
+  }
+  
+  return students.map((s: BackendStudent) => ({
     id: s.id,
-    fullName: s.full_name,
+    fullName: s.full_name || s.email?.split("@")[0] || "Unknown",
     email: s.email,
   }));
 };
@@ -240,6 +363,8 @@ export const useCourses = () => {
   return useQuery({
     queryKey: ["courses"],
     queryFn: fetchCourses,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
   });
 };
 
@@ -247,6 +372,8 @@ export const useCourse = (courseId: string) => {
     return useQuery({
       queryKey: ["course", courseId],
       queryFn: () => fetchCourseById(courseId),
+      staleTime: 10 * 60 * 1000,
+      gcTime: 30 * 60 * 1000,
     });
 };
 
@@ -254,6 +381,8 @@ export const useAssignments = (courseId: string) => {
   return useQuery({
     queryKey: ["assignments", courseId],
     queryFn: () => fetchAssignments(courseId),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
   });
 };
 
@@ -261,6 +390,8 @@ export const useAssignment = (assignmentId: string) => {
     return useQuery({
       queryKey: ["assignment", assignmentId],
       queryFn: () => fetchAssignmentById(assignmentId),
+      staleTime: 5 * 60 * 1000,
+      gcTime: 30 * 60 * 1000,
     });
 };
 
@@ -268,6 +399,8 @@ export const useSubmissions = (assignmentId: string) => {
   return useQuery({
     queryKey: ["submissions", assignmentId],
     queryFn: () => fetchSubmissions(assignmentId),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
   });
 };
 
@@ -275,6 +408,8 @@ export const useCourseStudents = (courseId: string) => {
   return useQuery({
     queryKey: ["course-students", courseId],
     queryFn: () => fetchCourseStudents(courseId),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
   });
 };
 export const useCreateAssignment = () => {
@@ -306,13 +441,20 @@ export const useDeleteAssignment = () => {
 export const useRunPlagiarism = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (assignmentId: string) => {
-      // Start detection in background and return immediately
-      const response = await runPlagiarismCheck(assignmentId);
-      return response;
-    },
-    onSuccess: (_, assignmentId) => {
-      // Invalidate reports cache to trigger refetch
+    mutationFn: (assignmentId: string) => runPlagiarismCheck(assignmentId),
+    onSuccess: (data, assignmentId) => {
+      if (data && typeof data === "object" && Array.isArray((data as AssignmentReport).matrix)) {
+        queryClient.setQueryData<AssignmentReport[] | undefined>(
+          ["assignmentReports", assignmentId],
+          (current) => {
+            const reports = Array.isArray(current) ? current : [];
+            const nextReport = data as AssignmentReport;
+            const filtered = reports.filter((report) => report.report_id !== nextReport.report_id);
+            return [nextReport, ...filtered];
+          }
+        );
+      }
+
       queryClient.invalidateQueries({ queryKey: ["assignmentReports", assignmentId] });
     },
     onError: (error) => {
@@ -339,6 +481,14 @@ export const useStudentReport = (studentReportId: string | null | undefined) => 
     queryKey: ["student-report", studentReportId],
     queryFn: () => fetchStudentReport(studentReportId as string),
     enabled: Boolean(studentReportId),
+  });
+};
+
+export const useAssignmentClusters = (assignmentId: string) => {
+  return useQuery({
+    queryKey: ["clusters", assignmentId],
+    queryFn: () => fetchAssignmentClusters(assignmentId),
+    enabled: false,
   });
 };
 

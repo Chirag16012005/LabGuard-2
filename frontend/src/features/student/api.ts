@@ -78,7 +78,9 @@ function mapAssignment(a: BackendAssignment): Assignment {
 export type Submission = {
   id?: string | null;
   assignmentId: string;
+  studentId: string;
   studentName: string;
+  documentId?: string | null;
   status: "submitted" | "processing" | "failed" | "not_submitted";
   submittedAt?: string | null;
 };
@@ -87,7 +89,9 @@ function mapSubmission(s: BackendSubmission): Submission {
   return {
     id: s.id,
     assignmentId: s.assignment_id,
+    studentId: s.student_id,
     studentName: s.student_name,
+    documentId: s.document_id ?? null,
     status: s.status,
     submittedAt: s.submitted_at,
   };
@@ -222,22 +226,51 @@ export const useSubmitAssignment = () => {
 };
 
 export const fetchStudentSubmission = async (
-  assignmentId: string
+  assignmentId: string,
+  studentId: string | null
 ): Promise<Submission | null> => {
+  if (!studentId) return null;
+
   try {
-    const res = await apiClient.get<ApiEnvelope<BackendSubmission>>(
-      `/assignments/${assignmentId}/my-submission`
+    const res = await apiClient.get<ApiEnvelope<BackendSubmission[]>>(
+      `/assignments/${assignmentId}/submissions`
     );
-    return mapSubmission(res.data.data);
+
+    const submissions = Array.isArray(res.data.data) ? res.data.data : [];
+    const submission = submissions.find(
+      (item) => item.student_id === studentId
+    );
+    return submission ? mapSubmission(submission) : null;
   } catch {
     return null;
   }
 };
 
-export const useStudentSubmission = (assignmentId: string) =>
+export const fetchAssignmentSubmissions = async (
+  assignmentId: string
+): Promise<Submission[]> => {
+  const res = await apiClient.get<ApiEnvelope<BackendSubmission[]>>(
+    `/assignments/${assignmentId}/submissions`
+  );
+
+  const submissions = Array.isArray(res.data.data) ? res.data.data : [];
+  return submissions.map(mapSubmission);
+};
+
+export const useStudentSubmission = (
+  assignmentId: string,
+  studentId: string | null
+) =>
   useQuery({
-    queryKey: ["submission", assignmentId],
-    queryFn: () => fetchStudentSubmission(assignmentId),
+    queryKey: ["submission", assignmentId, studentId],
+    queryFn: () => fetchStudentSubmission(assignmentId, studentId),
+    enabled: !!assignmentId && !!studentId,
+  });
+
+export const useAssignmentSubmissions = (assignmentId: string) =>
+  useQuery({
+    queryKey: ["assignment-submissions", assignmentId],
+    queryFn: () => fetchAssignmentSubmissions(assignmentId),
     enabled: !!assignmentId,
   });
 
@@ -251,6 +284,7 @@ type AssignmentReport = {
   generated_at?: string | null;
   matrix?: Array<{
     student_id?: string;
+    document_id?: string;
     student_report_id?: string;
     [key: string]: unknown;
   }>;

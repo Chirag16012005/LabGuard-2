@@ -31,6 +31,15 @@ app.add_middleware(
 )
 app.include_router(api_router, prefix="/api/v1")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],   # local Next.js dev
+    allow_origin_regex=r"https://.*\.vercel\.app",  # all Vercel deployments
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.include_router(api_router, prefix="/api/v1")
 
 @app.get("/")
 async def root():

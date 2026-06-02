@@ -20,14 +20,15 @@ settings = get_settings()
 app = FastAPI(title=settings.app_name)
 
 # Configure CORS
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Next.js default port
+    allow_origins=["http://localhost:3000"],   # local Next.js dev
+    allow_origin_regex=r"https://.*\.vercel\.app",  # all Vercel deployments
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 app.include_router(api_router, prefix="/api/v1")
 
 
@@ -38,8 +39,8 @@ async def root():
     return JSONResponse({
         "message": "Plagiarism Detection API",
         "version": "1.0.0",
-        "documentation": "http://127.0.0.1:8000/docs",
-        "openapi": "http://127.0.0.1:8000/openapi.json",
+        "documentation": "http://127.0.0.1:8001/docs",
+        "openapi": "http://127.0.0.1:8001/openapi.json",
         "api_base": "/api/v1",
     })
 

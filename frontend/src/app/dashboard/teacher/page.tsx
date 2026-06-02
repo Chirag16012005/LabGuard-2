@@ -36,7 +36,7 @@ export default function TeacherDashboardPage() {
   const teacherStats = [
     { label: "Active Courses", value: courses?.length || 0, icon: BookOpen, color: "text-blue-500" },
     { label: "Students Enrolled", value: 0, icon: Users, color: "text-green-500" },
-    { label: "Pending Submissions", value: 42, icon: ClipboardCheck, color: "text-amber-500" },
+    { label: "Pending Submissions", value: 0, icon: ClipboardCheck, color: "text-amber-500" },
   ];
 
   return (

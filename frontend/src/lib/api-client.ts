@@ -26,6 +26,10 @@ type MePayload = {
     role: "student" | "teacher";
   };
 };
+const baseURL = process.env.NEXT_PUBLIC_API_BASE_URL;
+if (!baseURL && process.env.NODE_ENV === "production") {
+  throw new Error("NEXT_PUBLIC_API_BASE_URL is not set");
+}
 
 export const apiClient = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8001/api/v1",

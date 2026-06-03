@@ -190,7 +190,7 @@ export const getDetectionJob = async (jobId: string): Promise<DetectionJob> => {
 
   try {
     console.log("[plagiarism] Fetching detection job status", { jobId });
-    const res = await apiClient.get<DetectionJobStatusResponse>(`/detection/jobs/${jobId}`);
+    const res = await apiClient.get<DetectionJobStatusResponse>(`/detection/jobs/${jobId}`,{ timeout: 16000 });
     const job = res.data.data;
 
     if (!job?.job_id) {
@@ -222,7 +222,7 @@ export const pollDetectionJob = async (
     throw new Error("A valid detection job ID is required");
   }
 
-  const maxRetries = 20;
+  const maxRetries = 40;
   const intervalMs = 5000;
 
   console.log("[plagiarism] Polling detection job until completion", {

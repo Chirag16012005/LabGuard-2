@@ -222,8 +222,8 @@ export const pollDetectionJob = async (
     throw new Error("A valid detection job ID is required");
   }
 
-  const maxRetries = 10;
-  const intervalMs = 4000;
+  const maxRetries = 20;
+  const intervalMs = 5000;
 
   console.log("[plagiarism] Polling detection job until completion", {
     jobId,

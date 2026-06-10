@@ -399,7 +399,7 @@ class PlagiarismDetector:
             except Exception as e:
                 logger.error("Failed to preprocess document %s: %s", doc_id, e)
                 preprocessed[doc_id] = ("", [])
-
+    
         logger.info("✅ Preprocessing complete:")
         for doc_id, (normalized, tokens) in preprocessed.items():
             logger.info("  %s: %d normalized chars, %d tokens", doc_id, len(normalized), len(tokens))

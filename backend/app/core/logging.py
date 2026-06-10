@@ -15,7 +15,14 @@ import logging.handlers
 import os
 from pathlib import Path
 from datetime import datetime
+import sys
 
+# If you build a StreamHandler, point it at a UTF-8 reconfigured stream:
+for stream in (sys.stdout, sys.stderr):
+    try:
+        stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+    except (AttributeError, ValueError):
+        pass
 
 # Create logs directory if it doesn't exist
 LOGS_DIR = Path("logs")
@@ -65,6 +72,7 @@ def setup_logging() -> None:
         APP_LOG_FILE,
         maxBytes=MAX_LOG_SIZE,
         backupCount=BACKUP_COUNT,
+        encoding="utf-8",
     )
     app_file_handler.setLevel(logging.DEBUG)
     app_file_handler.setFormatter(formatter)
@@ -86,6 +94,7 @@ def setup_logging() -> None:
         ROUTER_LOG_FILE,
         maxBytes=MAX_LOG_SIZE,
         backupCount=BACKUP_COUNT,
+        encoding="utf-8",
     )
     router_file_handler.setLevel(logging.DEBUG)
     router_file_handler.setFormatter(formatter)
@@ -101,6 +110,7 @@ def setup_logging() -> None:
         DATABASE_LOG_FILE,
         maxBytes=MAX_LOG_SIZE,
         backupCount=BACKUP_COUNT,
+        encoding="utf-8",
     )
     db_file_handler.setLevel(logging.DEBUG)
     db_file_handler.setFormatter(formatter)
@@ -116,6 +126,7 @@ def setup_logging() -> None:
         PARSER_LOG_FILE,
         maxBytes=MAX_LOG_SIZE,
         backupCount=BACKUP_COUNT,
+        encoding="utf-8",
     )
     parser_file_handler.setLevel(logging.DEBUG)
     parser_file_handler.setFormatter(formatter)
@@ -131,6 +142,7 @@ def setup_logging() -> None:
         DETECTION_LOG_FILE,
         maxBytes=MAX_LOG_SIZE,
         backupCount=BACKUP_COUNT,
+        encoding="utf-8",
     )
     detection_file_handler.setLevel(logging.DEBUG)
     detection_file_handler.setFormatter(formatter)

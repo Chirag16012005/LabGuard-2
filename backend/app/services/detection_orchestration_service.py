@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+import anyio.to_thread
+
 from ..repositories.submission_repository import SubmissionRepository
 from ..services.document_service import Document
 from ..services.document_management_service import DocumentManagementService
@@ -130,7 +132,9 @@ class DetectionOrchestrationService:
 
             # Run detection pipeline
             logger.info("Running plagiarism detection on %d documents", len(documents))
-            detection_results = self.detector.detect(documents)
+            detection_results = await anyio.to_thread.run_sync(
+            self.detector.detect, documents
+            )
 
             if not detection_results:
                 logger.warning("Detection returned empty results")

@@ -13,7 +13,7 @@ import {
   useRunPlagiarism,
 } from "@/features/teacher/api";
 import { SubmissionRow } from "@/components/ui/submission-row";
-import ClusterCard from "@/components/ClusterCard";
+import ClusterCard from "@/components/ui/ClusterCard";
 import { Loader2, ArrowLeft, Users } from "lucide-react";
 import { toast } from "sonner";
 

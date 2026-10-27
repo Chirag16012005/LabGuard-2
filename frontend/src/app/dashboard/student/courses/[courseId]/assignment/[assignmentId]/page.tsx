@@ -24,8 +24,9 @@ export default function StudentAssignmentPage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      if (file.type !== "application/pdf") {
-        toast.error("Only PDF files are allowed");
+      const allowedTypes = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain"];
+      if (!allowedTypes.includes(file.type)) {
+        toast.error("Only PDF, DOCX, and TXT files are allowed");
         return;
       }
       setSelectedFile(file);
@@ -179,48 +180,48 @@ export default function StudentAssignmentPage() {
                 The deadline for this assignment has passed. You can no longer submit your work.
               </p>
             ) : (
-              <div className="space-y-6">
-                <p className="text-sm text-blue-700 dark:text-blue-400">
-                  Please upload your work in PDF format. Make sure your file is final before submitting.
-                </p>
+                <div className="space-y-6">
+                  <p className="text-sm text-blue-700 dark:text-blue-400">
+                    Please upload your work in PDF format. Make sure your file is final before submitting.
+                  </p>
 
-                <div className="space-y-4">
-                  <label className="block">
-                    <div className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-xl transition-colors cursor-pointer ${
-                      selectedFile ? "border-blue-400 bg-blue-50/50 dark:border-blue-500/40 dark:bg-blue-900/5" : "border-slate-300 hover:border-blue-400 dark:border-slate-700"
-                    }`}>
-                      <div className="space-y-1 text-center">
-                        <Upload className={`mx-auto h-12 w-12 ${selectedFile ? "text-blue-500" : "text-slate-400"}`} />
-                        <div className="flex text-sm text-slate-600 dark:text-slate-400">
-                          <label className="relative cursor-pointer rounded-md font-semibold text-blue-600 hover:text-blue-500">
-                            <span>{selectedFile ? "Change file" : "Upload a file"}</span>
-                            <input type="file" className="sr-only" onChange={handleFileChange} accept=".pdf" />
-                          </label>
-                          {!selectedFile && <p className="pl-1">or drag and drop</p>}
+                  <div className="space-y-4">
+                    <label className="block">
+                      <div className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-xl transition-colors cursor-pointer ${
+                        selectedFile ? "border-blue-400 bg-blue-50/50 dark:border-blue-500/40 dark:bg-blue-900/5" : "border-slate-300 hover:border-blue-400 dark:border-slate-700"
+                      }`}>
+                        <div className="space-y-1 text-center">
+                          <Upload className={`mx-auto h-12 w-12 ${selectedFile ? "text-blue-500" : "text-slate-400"}`} />
+                          <div className="flex text-sm text-slate-600 dark:text-slate-400">
+                            <label className="relative cursor-pointer rounded-md font-semibold text-blue-600 hover:text-blue-500">
+                              <span>{selectedFile ? "Change file" : "Upload a file"}</span>
+                              <input type="file" className="sr-only" onChange={handleFileChange} accept=".pdf, .docx, .txt" />
+                            </label>
+                            {!selectedFile && <p className="pl-1">or drag and drop</p>}
+                          </div>
+                          <p className="text-xs text-slate-500">
+                            {selectedFile ? selectedFile.name : "PDF up to 10MB"}
+                          </p>
                         </div>
-                        <p className="text-xs text-slate-500">
-                          {selectedFile ? selectedFile.name : "PDF up to 10MB"}
-                        </p>
                       </div>
-                    </div>
-                  </label>
+                    </label>
 
-                  <button
-                    onClick={handleSubmit}
-                    disabled={!selectedFile || submitting}
-                    className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-200 dark:shadow-none flex items-center justify-center gap-2"
-                  >
-                    {submitting ? (
-                      <>
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                        Submitting...
-                      </>
-                    ) : (
-                      "Submit Assignment"
-                    )}
-                  </button>
+                    <button
+                      onClick={handleSubmit}
+                      disabled={!selectedFile || submitting}
+                      className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-200 dark:shadow-none flex items-center justify-center gap-2"
+                    >
+                      {submitting ? (
+                        <>
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                          Submitting...
+                        </>
+                      ) : (
+                        "Submit Assignment"
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
             )}
           </section>
 

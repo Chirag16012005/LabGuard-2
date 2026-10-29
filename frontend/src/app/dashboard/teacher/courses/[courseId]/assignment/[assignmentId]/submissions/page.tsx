@@ -15,6 +15,7 @@
     clearStoredJobId,
   } from "@/features/teacher/api";
   import { SubmissionRow } from "@/components/ui/submission-row";
+  import DetectionProgress from "@/components/ui/detection-progress";
   import { Loader2, ArrowLeft, FileStack, Search, CheckCircle2, Clock, AlertCircle } from "lucide-react";
   import { toast } from "sonner";
 
@@ -254,7 +255,7 @@
 
         setStoredJobId(assignmentId, result.job_id);
         setJobId(result.job_id);
-        toast.loading("Running plagiarism detection...", { id: loadingToastId });
+        toast.dismiss("detection-job");
         return;
       } catch (error) {
         setDetectionStatus("error");
@@ -346,6 +347,10 @@
             </div>
           </div>
         </div>
+
+        {Boolean(jobId) && (
+          <DetectionProgress status={job?.status} createdAt={job?.created_at} />
+        )}
 
         {/* Filters and Search */}
         <div className="flex flex-col md:flex-row gap-4 items-center justify-between">

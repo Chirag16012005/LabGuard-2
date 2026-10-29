@@ -17,6 +17,7 @@ import {
 } from "@/features/teacher/api";
 import { SubmissionRow } from "@/components/ui/submission-row";
 import ClusterCard from "@/components/ui/ClusterCard";
+import DetectionProgress from "@/components/ui/detection-progress";
 import { Loader2, ArrowLeft, Users } from "lucide-react";
 import { toast } from "sonner";
 
@@ -162,7 +163,7 @@ export default function AssignmentSubmissionsPage() {
 
       setStoredJobId(assignmentId, newJobId);
       setJobId(newJobId);
-      toast.loading("Running plagiarism detection...", { id: loadingToastId });
+      toast.dismiss("detection-job");
       return;
     } catch (error) {
       console.error("Failed to run plagiarism check:", error);
@@ -257,6 +258,10 @@ export default function AssignmentSubmissionsPage() {
           </div>
         )}
       </div>
+
+      {Boolean(jobId) && (
+        <DetectionProgress status={job?.status} createdAt={job?.created_at} />
+      )}
 
       {isClusterError && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
